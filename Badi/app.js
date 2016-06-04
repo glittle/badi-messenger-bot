@@ -43,32 +43,19 @@ bot.on('message', (payload, reply) => {
 
 function respond(reply, profile, log, question, key) {
 
-  var foundSomethingToDo = false;
   var answer = [];
 
   if (question.search(/hello/i) !== -1) {
-    foundSomethingToDo = true;
     answer.push(`Hello ${profile.first_name}!`);
   }
 
   if (question.search(/today/i) !== -1) {
-    foundSomethingToDo = true;
 
     var dateInfo = getDate({ gDate: new Date() }, function (err, info) {
       if (err) {
         answer.push(err);
-        //reply({ text: 'Sorry, ' + err }, (err) => {
-        //  if (err) throw err
-        //})
       } else {
         answer.push(info.text);
-        //reply({ text: info.text }, (err) => {
-        //  if (err) {
-        //    console.log(err);
-        //    throw err;
-        //  }
-        //  console.log(`Replied: ` + info.text)
-        //})
       }
     });
   }
@@ -82,10 +69,18 @@ function respond(reply, profile, log, question, key) {
   } else {
     console.log(`??`)
     reply({ text: 'You can ask "today" and I can tell you what day it is now.' }, (err) => {
-      if (err) {
-        console.log(err);
-      }
-    })
+        if (err) {
+            console.log(err);
+        }
+    });
+    if (log && log.length) {
+        reply({ text: `We have chatted ${log.length} times!` }, (err) => {
+            if (err) {
+                console.log(err);
+            }
+        });
+
+    }
   }
 
 
