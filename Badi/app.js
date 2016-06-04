@@ -50,6 +50,8 @@ function respond(reply, profile, log, question, key) {
   }
 
   if (question.search(/today/i) !== -1) {
+      var tz = profile.timezone;
+
 
     var dateInfo = getDate({ gDate: new Date() }, function (err, info) {
       if (err) {
