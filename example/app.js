@@ -1,7 +1,8 @@
-'use strict'
+﻿'use strict'
 const http = require('http')
-const Bot = require('messenger-bot')
-const getDate = require('./badiCalc')
+const Bot = require('messenger-bot');
+const storage = require('node-persist');
+const getDate = require('./badiCalc');
 
 let bot = new Bot({
   token: 'EAASZCBdZBZCAw4BAENLsG9yFr82PVd5A9nAoWqvMZAxD1OZCpVkDUGCgU1jI51fEon5qbZASaFpSRgG7IQqZC207K5ucZAFXqZCzLivhE6euolx7yG8lUIW9FblgtvGzArutftE2b2ZC5sHhYZB7tlEEBiaYQTHjgRnfaZBBJBl09kGG8wZDZD',
@@ -12,74 +13,92 @@ bot.on('error', (err) => {
   console.log(err.message)
 })
 
+storage.initSync({
+  dir: '../../../../BadiBotStorage'
+});
 
-var knownPeople = {};
 
 bot.on('message', (payload, reply) => {
-  console.log('incoming...');
+
   var senderId = payload.sender.id;
-  var profile = knownPeople[senderId];
+  var key = {
+    profile: 'profile_' + senderId,
+    log: 'profile_' + senderId + '_log'
+  };
+  
+  var profile = storage.getItem(key.profile);
+  var log = storage.getItem(key.log);
 
   if (profile) {
-    respond(reply, profile, payload.message);
+    console.log('Incoming (' + profile.visitCount + '): ' + payload.message.text);
+    respond(reply, profile, log, payload.message.text, key);
   } else {
     bot.getProfile(payload.sender.id, (err, profile) => {
       if (err) throw err
-      knownPeople[senderId] = profile;
-
-      respond(reply, profile, payload.message);
+      console.log('Incoming (new):' + payload.message.text);
+      respond(reply, profile, log, payload.message.text, key);
     });
   }
 });
 
-function respond(reply, profile, message) {
-
-  var question = message.text;
+function respond(reply, profile, log, question, key) {
 
   var foundSomethingToDo = false;
-  var answer;
+  var answer = [];
 
   if (question.search(/hello/i) !== -1) {
     foundSomethingToDo = true;
-    console.log('they said hello! :)');
-    answer = `Hello ${profile.first_name}!`;
-
-    reply({ text: answer }, (err) => {
-      if (err) throw err
-
-      console.log(`Echoed back to ${profile.first_name} ${profile.last_name}: ${answer}`)
-    })
-
+    answer.push(`Hello ${profile.first_name}!`);
   }
-
 
   if (question.search(/today/i) !== -1) {
     foundSomethingToDo = true;
 
     var dateInfo = getDate({ gDate: new Date() }, function (err, info) {
       if (err) {
-        reply({ text: 'Sorry, ' + err }, (err) => {
-          if (err) throw err
-        })
+        answer.push(err);
+        //reply({ text: 'Sorry, ' + err }, (err) => {
+        //  if (err) throw err
+        //})
+      } else {
+        answer.push(info.text);
+        //reply({ text: info.text }, (err) => {
+        //  if (err) {
+        //    console.log(err);
+        //    throw err;
+        //  }
+        //  console.log(`Replied: ` + info.text)
+        //})
       }
-
-      reply({ text: info.text }, (err) => {
-        if (err) {
-          console.log(err);
-          throw err;
-        }
-        console.log(`Sent date info`)
-      })
     });
   }
 
-  if (!foundSomethingToDo) {
+  if (answer.length) {
+    var answerText = answer.join('\n');
+    reply({ text: answerText }, (err) => {
+      if (err) throw err
+      console.log(`Answered: ${answerText}`)
+    })
+  } else {
+    console.log(`??`)
     reply({ text: 'You can ask "today" and I can tell you what day it is now.' }, (err) => {
       if (err) {
         console.log(err);
       }
     })
   }
+
+
+  if (!log) log = [];
+  log.push({
+    when: new Date(),
+    question: question,
+    answer: answer
+  });
+  profile.visitCount = log.length;
+
+  storage.setItem(key.profile, profile);
+  storage.setItem(key.log, log);
 
   //setTimeout(function () {
   //  text = 'Are you still there??';

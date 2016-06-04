@@ -10,18 +10,17 @@ const sunCalcReady = false;
 
 module.exports = function getDate(opts, cb) {
   fillDatePresets();
-  console.log(opts.gDate)
   try {
     var bDate = getBDate(opts.gDate);
 
+    var fromDate = copyAndAddDays(opts.gDate, -1);
+
     cb(null, {
       raw: bDate,
-      text: `It is now ${monthMeaning[bDate.m]} ${bDate.d}.`
+      text: `${monthMeaning[bDate.m]} / ${monthAr[bDate.m]} ${bDate.d} is from sunset on ${gMonthLong[fromDate.getMonth()]} ${fromDate.getDate()} to sunset on ${gMonthLong[opts.gDate.getMonth()]} ${opts.gDate.getDate()}.`
     });
   } catch (err) {
-    console.log(err);
     cb(err.message);
-
   }
 }
 
@@ -972,7 +971,7 @@ function fillDatePresets() {
   // table of Twin Holy birthday dates
   _twinHolyBirthdays = {
     // first of the two days, in Badi date code
-    // extracted from "Bah�� Dates 172 to 221 B.E." and http://www.bahaidate.today/table-of-dates
+    // extracted from "Bahá’í Dates 172 to 221 B.E." and http://www.bahaidate.today/table-of-dates
     172: '13.10',
     173: '12.18',
     174: '12.7',
@@ -1806,3 +1805,5 @@ function fillDatePresets() {
 }
 
 var monthMeaning = "Intercalary Days,Splendor,Glory,Beauty,Grandeur,Light,Mercy,Words,Perfection,Names,Might,Will,Knowledge,Power,Speech,Questions,Honor,Sovereignty,Dominion,Loftiness".split(',');
+var monthAr = "Ayyám-i-Há,Bahá,Jalál,Jamál,`Azamat,Núr,Rahmat,Kalimát,Kamál,Asmá’,`Izzat,Mashíyyat,`Ilm,Qudrat,Qawl,Masá'il,Sharaf,Sultán,Mulk,`Alá’".split(',');
+var gMonthLong = "January,February,March,April,May,June,July,August,September,October,November,December".split(',');
