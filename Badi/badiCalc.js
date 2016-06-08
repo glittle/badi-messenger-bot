@@ -18,7 +18,7 @@ module.exports = function getDate(opts, cb) {
 
         cb(null, {
             raw: bDate,
-            text: `${monthMeaning[bDate.m]} / ${monthAr[bDate.m]} ${bDate.d} is from sunset on ${gMonthLong[fromDate.getMonth()]} ${fromDate.getDate()} to sunset on ${gMonthLong[opts.gDate.getMonth()]} ${opts.gDate.getDate()}.`
+            text: `${monthMeaning[bDate.m]} / ${monthAr[bDate.m]} ${bDate.d} goes from sunset on ${gMonthLong[fromDate.getMonth()]} ${fromDate.getDate()} to sunset on ${gMonthLong[opts.gDate.getMonth()]} ${opts.gDate.getDate()}.`
         });
     } catch (err) {
         cb(err.message);
