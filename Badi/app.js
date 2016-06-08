@@ -5,7 +5,7 @@ const storage = require('node-persist');
 const getDate = require('./badiCalc');
 
 var timeout = null;
-var manuallyStopped = true;
+var manuallyStopped = false;
 
 let bot = new Bot({
   token: 'EAASZCBdZBZCAw4BAENLsG9yFr82PVd5A9nAoWqvMZAxD1OZCpVkDUGCgU1jI51fEon5qbZASaFpSRgG7IQqZC207K5ucZAFXqZCzLivhE6euolx7yG8lUIW9FblgtvGzArutftE2b2ZC5sHhYZB7tlEEBiaYQTHjgRnfaZBBJBl09kGG8wZDZD',
@@ -107,7 +107,7 @@ function respond(reply, profile, log, question, key, reminders, senderId) {
       hours = +matches[0];
     }
 
-    answer.push(`I'll try to let you know around ${hours}:00 about the Badí' date.`);
+    answer.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${hours}:00 about the Badí' date.`);
 
     var localReminderHour = Math.floor(hours + hourDifference); // don't deal with partial hours
     if (localReminderHour > 23) {
@@ -201,7 +201,7 @@ function prepareReminderTimer() {
     return;
   }
 
-  var inDevelopment = true;
+  var inDevelopment = false;
 
   // time to next hour
   var now = new Date();
