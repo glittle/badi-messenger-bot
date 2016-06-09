@@ -3,6 +3,7 @@ const http = require('http')
 const Bot = require('messenger-bot');
 const storage = require('node-persist');
 const getDate = require('./badiCalc');
+const moment = require('moment');
 
 var timeout = null;
 var manuallyStopped = false;
@@ -25,23 +26,22 @@ bot.on('message', (payload, reply) => {
 
   var senderId = payload.sender.id;
   var key = {
-    profile: 'profile_' + senderId,
-    log: 'profile_' + senderId + '_log',
-    reminders: 'reminders'
+    profile: senderId + '_profile',
+    log: senderId + '_log'
   };
 
   var profile = storage.getItem(key.profile);
   var log = storage.getItem(key.log);
-  var reminders = storage.getItem(key.reminders) || {};
 
   if (profile) {
     console.log('Incoming (' + profile.visitCount + '): ' + payload.message.text);
-    respond(reply, profile, log, payload.message.text, key, reminders, senderId);
+    respond(reply, profile, log, payload.message.text, key);
   } else {
     bot.getProfile(payload.sender.id, (err, profile) => {
       if (err) throw err
+      profile.id = senderId;
       console.log('Incoming (new):' + payload.message.text);
-      respond(reply, profile, log, payload.message.text, key, reminders, senderId);
+      respond(reply, profile, log, payload.message.text, key);
     });
   }
 });
@@ -58,41 +58,48 @@ function getUserDateInfo(profile) {
   };
 }
 
-function respond(reply, profile, log, question, key, reminders, senderId) {
-
-  var answer = [];
+function respond(reply, profile, log, question, key) {
+  var senderId = profile.id;
+  var answers = [];
   console.log(question);
   var userDateInfo = getUserDateInfo(profile);
 
   if (question.search(/hello/i) !== -1) {
-    answer.push(`Hello ${profile.first_name}!`);
+    answers.push(`Hello ${profile.first_name}!`);
+
+    if (log && log.length) {
+      answers.push(`We have chatted ${log.length} times!`);
+    }
   }
   if (question.search(/dev stop/i) !== -1) {
-    answer.push('Stopped reminders');
+    answers.push('Stopped reminders');
     clearTimeout(timeout);
     manuallyStopped = true;
   }
   if (question.search(/dev start/i) !== -1) {
-    answer.push('Started reminders');
+    answers.push('Started reminders');
     prepareReminderTimer();
     manuallyStopped = false;
   }
 
   if (question.search(/clear reminders/i) !== -1) {
-    var numCleared = clearReminders(reminders, senderId, answer, true);
+
+    var numCleared = clearReminders(senderId, answers, true);
     if (numCleared) {
-      answer.push(`I've cleared your reminder(s) and won't send you the daily reminders any more.`);
+      answers.push(`Done. I've cleared your reminder(s) and won't send you the daily reminders any more.`);
     } else {
-      answer.push(`I didn't find any reminders for you.`);
+      answers.push(`I didn't find any reminders for you.`);
     }
   }
 
   if (question.search(/remind when/i) !== -1) {
-    var numCleared = clearReminders(reminders, senderId, answer, false);
-    if (numCleared) {
-      answer.push(`Those are the reminder(s) I have for you.`);
+    var numCleared = clearReminders(senderId, answers, false);
+    if (numCleared === 1) {
+      answers.push(`That's the only reminder I have for you, ${profile.first_name}.`);
+    } else if (numCleared) {
+      answers.push(`Those are the reminders I have for you,  ${profile.first_name}.`);
     } else {
-      answer.push(`I didn't find any reminders for you.`);
+      answers.push(`Sorry, ${profile.first_name}. I didn't find any reminders for you.`);
     }
   }
 
@@ -107,91 +114,113 @@ function respond(reply, profile, log, question, key, reminders, senderId) {
       hours = +matches[0];
     }
 
-    answer.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${hours}:00 about the Badí' date.`);
+    answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${hours}:00 about the Badí' date.`);
 
     var localReminderHour = Math.floor(hours + hourDifference); // don't deal with partial hours
     if (localReminderHour > 23) {
       localReminderHour = localReminderHour - 24;
     }
+
+    // reminders are shared... storage is not multi-user, so use it for very short times!
+    var reminders = storage.getItem('reminders') || {};
     var reminderGroup = reminders[localReminderHour] || {};
-    reminderGroup[senderId] = profile; // avoid duplicates
+    reminderGroup[senderId] = {
+      profile: profile,
+      userHour: hours
+    }
     reminders[localReminderHour] = reminderGroup;
     //console.log(localReminderHour);
     //console.log(reminders);
-    storage.setItem(key.reminders, reminders);
+    storage.setItem('reminders', reminders);
   }
 
 
   if (question.search(/today/i) !== -1) {
     var dateInfo = getDate({ gDate: userDateInfo.now }, function (err, info) {
       if (err) {
-        answer.push(err);
+        answers.push(err);
       } else {
-        answer.push(info.text);
+        answers.push(`Hi ${profile.first_name}! ` + info.text);
       }
     });
   }
 
-  if (!answer.length) {
+  if (!answers.length) {
 
     var userDate = userDateInfo.now;
 
-    answer.push('Magic phrases that I should recognize:');
-    answer.push('  hello --> I\'ll reply with your name');
-    answer.push('  today --> I\'ll tell you what Badí\' day it is now\n');
-    answer.push("  remind at 21 --> I\'ll send you a reminder of Badí' date at that hour (use any hour)")
-    answer.push('  remind when --> I\'ll show you when I plan to remind you')
-    answer.push('  clear reminders --> I\'ll stop reminding you')
-    answer.push('  ')
-    answer.push(`I'm assuming that it is about ${userDate.toLocaleTimeString()} on ${userDate.toDateString()} where you are.\n`);
+    answers.push('Here are the phrases that you can use when talking with me.');
+    answers.push('');
+    answers.push('⇒ "today"\nI\'ll tell you what Badí\' day it is now.');
+    answers.push('');
+    answers.push(`⇒ "remind at" 21:00\nI\'ll send you a reminder of Badí' date at the top of that hour. Use any hour from 0 - 23.`)
+    answers.push('⇒ "remind when"?\nI\'ll show you when I plan to remind you.')
+    answers.push('⇒ "clear reminders"\nI\'ll stop reminding you.')
+    answers.push('');
+    answers.push('⇒ "hello"\nI\'ll reply with your name.');
+    answers.push('')
+    answers.push(`I'm assuming that it is about ${moment(userDate).format('HH:mm [on] MMMM D')} where you are. If that is not right, please let me know!`);
 
-    if (log && log.length) {
-      answer.push(`We have chatted ${log.length} times!`);
-    }
   }
 
-  var answerText = null;
-  for (var i = 0; i <= answer.length; i++) {
-    if (i == answer.length || (answerText + answer[i]).length > 319) {
-      reply({ text: answerText }, (err) => {
-        if (err) {
-          console.log(err);
-        } else {
-          console.log(`Answered: ${answerText}`)
-        }
-      })
-      if (i == answer.length) {
-        break;
+  sendAllAnswers(reply, question, answers, log, profile, key, null);
+
+  if (!manuallyStopped) {
+    prepareReminderTimer();
+  }
+}
+
+function sendAllAnswers(reply, question, answers, log, profile, key, originalAnswers) {
+  if (!originalAnswers) {
+    originalAnswers = JSON.parse(JSON.stringify(answers));
+  }
+  console.log('to send: ' + answers.length);
+  var keepGoing = true;
+  if (answers.length) {
+    var answerText = answers.shift();
+
+    for (var i = 0; keepGoing; i++) {
+      if (!answers.length // past the end
+          || (answerText && (answerText + answers[0]).length > 319)
+          || answers[0] === '') {
+        console.log(`sending to ${profile.id}: ${answerText}`)
+        bot.sendMessage(profile.id, { text: answerText }, (err) => {
+          if (err) {
+            console.log(err);
+          } else {
+            console.log(`Sent: ${answerText}`)
+            if (answers.length) {
+              setTimeout(function () {
+                sendAllAnswers(reply, question, answers, log, profile, key, originalAnswers);
+              }, 500);
+            }
+          }
+        });
+        keepGoing = false;
+      } else {
+        answerText = [answerText, answers.shift()].join('\n');
       }
-      answerText = null;
     }
-    answerText = [answerText, answer[i]].join('\n');
+    if (answers.length) {
+      return;
+    }
   }
-
 
   if (!log) log = [];
+
   log.push({
     when: new Date(),
     question: question,
-    answer: answer
+    answers: originalAnswers
   });
+
+  console.log('storing profile and log');
+
   profile.visitCount = log.length;
 
   storage.setItem(key.profile, profile);
   storage.setItem(key.log, log);
 
-  if (!manuallyStopped) {
-    prepareReminderTimer();
-  }
-  //setTimeout(function () {
-  //  text = 'Are you still there??';
-  //  reply({ text }, (err) => {
-  //    if (err) throw err
-
-  //    console.log(`Sent reminder to ${profile.first_name} ${profile.last_name}: ${text}`)
-  //  })
-
-  //}, 10000);
 }
 
 function prepareReminderTimer() {
@@ -237,18 +266,23 @@ function doReminders() {
 
   prepareReminderTimer();
 }
-function clearReminders(reminders, currentId, answer, actuallyDelete) {
+function clearReminders(currentId, answers, actuallyDelete) {
   var num = 0;
+
+  // reminders are shared... storage is not multi-user, so use it for very short times!
+  var reminders = storage.getItem('reminders') || {};
+
   for (var hour in reminders) {
     if (reminders.hasOwnProperty(hour)) {
       var reminderGroup = reminders[hour];
       for (var id in reminderGroup) {
         if (id === currentId) {
+          var info = reminderGroup[id];
           if (actuallyDelete) {
-            answer.push(`Removed reminder at ${hour}:00.`);
+            answers.push(`Removed reminder at ${info.userHour}:00.`);
             delete reminderGroup[id];
           } else {
-            answer.push(`Reminder set for ${hour}:00.`);
+            answers.push(`Reminder set for ${info.userHour}:00.`);
           }
           num++;
         }
@@ -259,18 +293,19 @@ function clearReminders(reminders, currentId, answer, actuallyDelete) {
   return num;
 }
 
-function sendReminder(id, profile) {
-  var answer = [];
+function sendReminder(id, info) {
+  var answers = [];
+  var profile = info.profile;
   var userDateInfo = getUserDateInfo(profile);
   var dateInfo = getDate({ gDate: userDateInfo.now }, function (err, info) {
     if (err) {
       console.log(err);
     } else {
-      answer.push(info.text);
+      answers.push(`Hello ${profile.first_name}. ` + info.text);
     }
   });
 
-  var answerText = answer.join('\n\n');
+  var answerText = answers.join('\n');
 
   bot.sendMessage(id, {
     text: answerText
@@ -278,7 +313,7 @@ function sendReminder(id, profile) {
     if (err) {
       console.log(err);
     } else {
-      console.log(`Reminded ${profile.first_name} ${profile.last_name}: ${answerText}`)
+      console.log(`Reminded for ${info.userHour}:00 ${profile.first_name} ${profile.last_name}: ${answerText}`)
     }
   })
 

@@ -27,6 +27,7 @@
   },
   "homepage": "https://github.com/remixz/messenger-bot#readme",
   "dependencies": {
+    "moment": "^2.13.0",
     "request": "^2.71.0"
   },
   "devDependencies": {
