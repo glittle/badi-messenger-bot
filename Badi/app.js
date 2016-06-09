@@ -61,7 +61,7 @@ function getUserDateInfo(profile) {
 function respond(reply, profile, log, question, key) {
   var senderId = profile.id;
   var answers = [];
-  console.log(question);
+
   var userDateInfo = getUserDateInfo(profile);
 
   if (question.search(/hello/i) !== -1) {
@@ -116,20 +116,23 @@ function respond(reply, profile, log, question, key) {
 
     answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${hours}:00 about the Badí' date.`);
 
-    var localReminderHour = Math.floor(hours + hourDifference); // don't deal with partial hours
-    if (localReminderHour > 23) {
-      localReminderHour = localReminderHour - 24;
+    var serverReminderHour = Math.floor(hours - hourDifference); // don't deal with partial hours
+    if (serverReminderHour > 23) {
+      serverReminderHour = serverReminderHour - 24;
+    }
+    if (serverReminderHour < 0) {
+      serverReminderHour = serverReminderHour + 24;
     }
 
     // reminders are shared... storage is not multi-user, so use it for very short times!
     var reminders = storage.getItem('reminders') || {};
-    var reminderGroup = reminders[localReminderHour] || {};
+    var reminderGroup = reminders[serverReminderHour] || {};
     reminderGroup[senderId] = {
       profile: profile,
       userHour: hours
     }
-    reminders[localReminderHour] = reminderGroup;
-    //console.log(localReminderHour);
+    reminders[serverReminderHour] = reminderGroup;
+    //console.log(serverReminderHour);
     //console.log(reminders);
     storage.setItem('reminders', reminders);
   }
@@ -174,7 +177,8 @@ function sendAllAnswers(reply, question, answers, log, profile, key, originalAns
   if (!originalAnswers) {
     originalAnswers = JSON.parse(JSON.stringify(answers));
   }
-  console.log('to send: ' + answers.length);
+
+  //console.log('to send: ' + answers.length);
   var keepGoing = true;
   if (answers.length) {
     var answerText = answers.shift();
@@ -183,17 +187,15 @@ function sendAllAnswers(reply, question, answers, log, profile, key, originalAns
       if (!answers.length // past the end
           || (answerText && (answerText + answers[0]).length > 319)
           || answers[0] === '') {
-        console.log(`sending to ${profile.id}: ${answerText}`)
+        //console.log(`sending to ${profile.id}: ${answerText}`)
         bot.sendMessage(profile.id, { text: answerText }, (err) => {
           if (err) {
             console.log(err);
           } else {
             console.log(`Sent: ${answerText}`)
-            if (answers.length) {
-              setTimeout(function () {
-                sendAllAnswers(reply, question, answers, log, profile, key, originalAnswers);
-              }, 500);
-            }
+            setTimeout(function () {
+              sendAllAnswers(reply, question, answers, log, profile, key, originalAnswers);
+            }, 500);
           }
         });
         keepGoing = false;
@@ -201,9 +203,7 @@ function sendAllAnswers(reply, question, answers, log, profile, key, originalAns
         answerText = [answerText, answers.shift()].join('\n');
       }
     }
-    if (answers.length) {
-      return;
-    }
+    return;
   }
 
   if (!log) log = [];
@@ -224,7 +224,6 @@ function sendAllAnswers(reply, question, answers, log, profile, key, originalAns
 }
 
 function prepareReminderTimer() {
-  clearTimeout(timeout);
 
   if (manuallyStopped) {
     return;
@@ -242,12 +241,14 @@ function prepareReminderTimer() {
   }
   var timeToNextHour = nextHour - now;
 
-  console.log(`Reminders scheduled for ${nextHour.toTimeString()}`);
-
+  clearTimeout(timeout);
   timeout = setTimeout(doReminders, timeToNextHour);
+
+  console.log(`(Reminders scheduled for ${nextHour.toTimeString()})`);
 }
 
 function doReminders() {
+  clearTimeout(timeout);
   var reminders = storage.getItem('reminders');
   if (reminders) {
     var thisHour = new Date().getHours();
