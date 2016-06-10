@@ -5,22 +5,24 @@ const storage = require('node-persist');
 const getDate = require('./badiCalc');
 const moment = require('moment');
 
+storage.initSync({
+  dir: '../../../../BadiBotStorage'
+});
+
 var timeout = null;
 var manuallyStopped = false;
 
+var secrets = storage.getItem('secrets');
+const timezonedb = require('timezonedb-node')(secrets.timeZoneKey);
+
 let bot = new Bot({
-  token: 'EAASZCBdZBZCAw4BAENLsG9yFr82PVd5A9nAoWqvMZAxD1OZCpVkDUGCgU1jI51fEon5qbZASaFpSRgG7IQqZC207K5ucZAFXqZCzLivhE6euolx7yG8lUIW9FblgtvGzArutftE2b2ZC5sHhYZB7tlEEBiaYQTHjgRnfaZBBJBl09kGG8wZDZD',
+  token: secrets.botKey,
   verify: 'MyBadiBot'
 });
 
 bot.on('error', (err) => {
   console.log(err.message)
 })
-
-storage.initSync({
-  dir: '../../../../BadiBotStorage'
-});
-
 
 bot.on('message', (payload, reply) => {
 
@@ -34,14 +36,12 @@ bot.on('message', (payload, reply) => {
   var log = storage.getItem(key.log);
 
   if (profile) {
-    console.log('Incoming (' + profile.visitCount + '): ' + payload.message.text);
-    respond(reply, profile, log, payload.message.text, key);
+    respond(reply, profile, log, payload.message, key);
   } else {
     bot.getProfile(payload.sender.id, (err, profile) => {
       if (err) throw err
       profile.id = senderId;
-      console.log('Incoming (new):' + payload.message.text);
-      respond(reply, profile, log, payload.message.text, key);
+      respond(reply, profile, log, payload.message, key);
     });
   }
 });
@@ -58,9 +58,67 @@ function getUserDateInfo(profile) {
   };
 }
 
-function respond(reply, profile, log, question, key) {
+function respond(reply, profile, log, payloadMessage, key) {
   var senderId = profile.id;
+  var question = '';
   var answers = [];
+
+  if (payloadMessage.text) {
+    question = payloadMessage.text;
+    console.log('Incoming (' + (profile.visitCount || 'new') + '): ' + question);
+  } else {
+    if (payloadMessage.attachments) {
+      for (var i = 0; i < payloadMessage.attachments.length; i++) {
+        var attach = payloadMessage.attachments[i];
+        switch (attach.type) {
+          case 'location':
+            var lat = attach.payload.coordinates.lat;
+            var long = attach.payload.coordinates.long;
+            timezonedb.getTimeZoneData({
+              lat: lat,
+              lng: long
+            }, function (error, data) {
+              if (!error) {
+                console.log(data);
+
+                var userOffset = data.gmtOffset / 3600;
+                var serverTz = new Date().getTimezoneOffset() / 60;
+                var hourDifference = serverTz + userOffset;
+
+                var userTime = new Date(data.timestamp * 1000);
+                userTime.setHours(userTime.getHours() - userOffset + hourDifference);
+                console.log(userTime);
+                var m = moment(userTime);
+                var answerText = `From your location, is it about ${m.format('HH:mm [on] MMMM D')} right now?`;
+
+                bot.sendMessage(senderId, {
+                  text: answerText
+                }, (err) => {
+                  if (err) {
+                    console.log(err);
+                  } else {
+                  }
+                })
+
+
+              } else {
+                console.error(error);
+              }
+            });
+            break;
+          default:
+            console.log(JSON.stringify(payloadMessage.attachments));
+            answers.push('Thanks, but I don\'t know what to do with that!');
+            break;
+        }
+      }
+    }
+    return;
+  }
+
+
+
+
 
   var userDateInfo = getUserDateInfo(profile);
 
@@ -161,8 +219,8 @@ function respond(reply, profile, log, question, key) {
     answers.push('⇒ "clear reminders"\nI\'ll stop reminding you.')
     answers.push('');
     answers.push('⇒ "hello"\nI\'ll reply with your name.');
-    answers.push('')
-    answers.push(`I'm assuming that it is about ${moment(userDate).format('HH:mm [on] MMMM D')} where you are. If that is not right, please let me know!`);
+    //answers.push('')
+    //answers.push(`I'm assuming that it is about ${moment(userDate).format('HH:mm [on] MMMM D')} where you are. If that is not right, please let me know!`);
 
   }
 
