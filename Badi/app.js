@@ -2,7 +2,7 @@
 const http = require('http')
 const Bot = require('messenger-bot');
 const storage = require('node-persist');
-const getDate = require('./badiCalc');
+const badiCalc = require('./badiCalc');
 const moment = require('moment');
 
 storage.initSync({
@@ -47,14 +47,14 @@ bot.on('message', (payload, reply) => {
 });
 
 function getUserDateInfo(profile) {
-  var userDate = new Date();
-  var tz = profile.timezone;
-  var serverTz = userDate.getTimezoneOffset() / 60;
-  var hourDifference = serverTz + tz;
-  userDate.setHours(userDate.getHours() + hourDifference);
+  var userDate = getUserNowTime(profile.tzInfo);
+  //var tz = profile.timezone;
+  //var serverTz = userDate.getTimezoneOffset() / 60;
+  //var hourDifference = serverTz + tz;
+  //userDate.setHours(userDate.getHours() + hourDifference);
   return {
     now: userDate,
-    diff: hourDifference
+    diff: profile.tzInfo.serverDiff
   };
 }
 
@@ -74,22 +74,38 @@ function respond(reply, profile, log, payloadMessage, key) {
           case 'location':
             var lat = attach.payload.coordinates.lat;
             var long = attach.payload.coordinates.long;
-            timezonedb.getTimeZoneData({
+            var coord = {
               lat: lat,
               lng: long
-            }, function (error, data) {
+            };
+            timezonedb.getTimeZoneData(coord, function (error, tzInfo) {
               if (!error) {
-                console.log(data);
+                console.log(tzInfo);
 
-                var userOffset = data.gmtOffset / 3600;
+                var userOffset = tzInfo.gmtOffset / 3600;
                 var serverTz = new Date().getTimezoneOffset() / 60;
                 var hourDifference = serverTz + userOffset;
 
-                var userTime = new Date(data.timestamp * 1000);
-                userTime.setHours(userTime.getHours() - userOffset + hourDifference);
-                console.log(userTime);
-                var m = moment(userTime);
-                var answerText = `From your location, is it about ${m.format('HH:mm [on] MMMM D')} right now?`;
+                tzInfo.serverDiff = hourDifference;
+
+                // reload and save the profile
+                var profile = storage.getItem(key.profile);
+                profile.tzInfo = tzInfo;
+                profile.coord = coord;
+                storage.setItem(key.profile, profile);
+
+
+                //console.log(hourDifference);
+                //var testTime = new Date();
+                //testTime.setHours(testTime.getHours() + hourDifference);
+
+                //var userTime = new Date(tzInfo.timestamp * 1000);
+                //userTime.setHours(userTime.getHours() - userOffset + hourDifference);
+                //console.log(userTime);
+                //var m = moment(userTime);
+
+                var answerText = 'Great! Thanks for your location!\n\n'
+                  + 'Now you can tell me when to remind you by saying, for example, "remind at 8" for 8 in the morning or "remind at 18" for 6 in the evening.';
 
                 bot.sendMessage(senderId, {
                   text: answerText
@@ -129,6 +145,8 @@ function respond(reply, profile, log, payloadMessage, key) {
       answers.push(`We have chatted ${log.length} times!`);
     }
   }
+
+  // if "DEV" commands expose secret information, add a whitelist of developers
   if (question.search(/dev stop/i) !== -1) {
     answers.push('Stopped reminders');
     clearTimeout(timeout);
@@ -138,6 +156,22 @@ function respond(reply, profile, log, payloadMessage, key) {
     answers.push('Started reminders');
     prepareReminderTimer();
     manuallyStopped = false;
+  }
+  if (question.search(/dev reminders/i) !== -1) {
+    answers.push('Reminders set for:');
+    var reminders = storage.getItem('reminders') || {};
+
+    for (var hour in reminders) {
+      if (reminders.hasOwnProperty(hour)) {
+        var reminderGroup = reminders[hour];
+        for (var id in reminderGroup) {
+          var info = reminderGroup[id];
+          var profile = info.profile;
+          var tzInfo = profile.tzInfo;
+          answers.push(`${hour} - ${profile.first_name} - ${info.userHour} in ${tzInfo.countryCode} - ${tzInfo.zoneName}.`);
+        }
+      }
+    }
   }
 
   if (question.search(/clear reminders/i) !== -1) {
@@ -163,52 +197,75 @@ function respond(reply, profile, log, payloadMessage, key) {
 
   if (question.search(/remind at/i) !== -1) {
 
-    //dev
-    var hourDifference = userDateInfo.diff;
+    if (profile.tzInfo) {
 
-    var hours = 21;
-    var matches = question.match(/\d+/);
-    if (matches) {
-      hours = +matches[0];
-    }
+      //getUserNowTime(profile.tzInfo)
 
-    answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${hours}:00 about the Badí' date.`);
+      //dev
+      var hourDifference = profile.tzInfo.serverDiff;
 
-    var serverReminderHour = Math.floor(hours - hourDifference); // don't deal with partial hours
-    if (serverReminderHour > 23) {
-      serverReminderHour = serverReminderHour - 24;
-    }
-    if (serverReminderHour < 0) {
-      serverReminderHour = serverReminderHour + 24;
-    }
+      var hours = 21;
+      var matches = question.match(/\d+/);
+      if (matches) {
+        hours = +matches[0];
+      }
 
-    // reminders are shared... storage is not multi-user, so use it for very short times!
-    var reminders = storage.getItem('reminders') || {};
-    var reminderGroup = reminders[serverReminderHour] || {};
-    reminderGroup[senderId] = {
-      profile: profile,
-      userHour: hours
+      answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${hours}:00 about the Badí' date.`);
+
+      var serverReminderHour = Math.floor(hours - hourDifference); // don't deal with partial hours
+      if (serverReminderHour > 23) {
+        serverReminderHour = serverReminderHour - 24;
+      }
+      if (serverReminderHour < 0) {
+        serverReminderHour = serverReminderHour + 24;
+      }
+
+      // reminders are shared... storage is not multi-user, so use it for very short times!
+      var reminders = storage.getItem('reminders') || {};
+      var reminderGroup = reminders[serverReminderHour] || {};
+      reminderGroup[senderId] = {
+        profile: profile,
+        userHour: hours
+      }
+      reminders[serverReminderHour] = reminderGroup;
+      //console.log(serverReminderHour);
+      //console.log(reminders);
+      storage.setItem('reminders', reminders);
+    } else {
+      answers.push('Sorry, I can\'t remind you until I know your location.');
     }
-    reminders[serverReminderHour] = reminderGroup;
-    //console.log(serverReminderHour);
-    //console.log(reminders);
-    storage.setItem('reminders', reminders);
   }
 
+  if (question.search(/sun times/i) !== -1) {
+    badiCalc.test(profile.tzInfo.serverDiff, profile.coord, answers);
+  }
 
   if (question.search(/today/i) !== -1) {
-    var dateInfo = getDate({ gDate: userDateInfo.now }, function (err, info) {
-      if (err) {
-        answers.push(err);
-      } else {
-        answers.push(`Hi ${profile.first_name}! ` + info.text);
-      }
-    });
+    if (profile.tzInfo) {
+      var now = new Date();
+
+      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
+        if (err) {
+          answers.push(err);
+        } else {
+          answers.push(`Hi ${profile.first_name}! ` + info.text);
+        }
+      });
+    } else {
+
+      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
+        if (err) {
+          answers.push(err);
+        } else {
+          answers.push(`Hi ${profile.first_name}! ` + info.text);
+        }
+      });
+    }
   }
 
   if (!answers.length) {
 
-    var userDate = userDateInfo.now;
+    //var userDate = userDateInfo.now;
 
     answers.push('Here are the phrases that you can use when talking with me.');
     answers.push('');
@@ -356,7 +413,7 @@ function sendReminder(id, info) {
   var answers = [];
   var profile = info.profile;
   var userDateInfo = getUserDateInfo(profile);
-  var dateInfo = getDate({ gDate: userDateInfo.now }, function (err, info) {
+  var dateInfo = badiDate.getDate({ gDate: userDateInfo.now }, function (err, info) {
     if (err) {
       console.log(err);
     } else {
@@ -376,6 +433,12 @@ function sendReminder(id, info) {
     }
   })
 
+}
+
+function getUserNowTime(tzInfo) {
+  var now = new Date();
+  now.setHours(now.getHours() + tzInfo.serverDiff);
+  return now;
 }
 
 prepareReminderTimer();
