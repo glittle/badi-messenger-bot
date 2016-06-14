@@ -8,42 +8,90 @@ var _twinHolyBirthdays = [];
 
 const sunCalcReady = false;
 
-module.exports = {
-  test: function (offset, coord, answers) {
-    var noon = new Date();
-    noon.setHours(12, 0, 0, 0);
-    var sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
-    addHours(sun.sunrise, offset);
-    addHours(sun.sunset, offset);
+fillDatePresets();
 
-    // times are right for the user, but ignore the timezone!
+function sunTimes(profile, answers) {
+  var offset = profile.tzInfo.serverDiff;
+  var coord = profile.coord;
+  var noon = new Date();
+  noon.setHours(12, 0, 0, 0);
 
-    answers.push(`Sunrise: ${moment(sun.sunrise).format('HH:mm')}`);
-    answers.push(`\nSunset: ${moment(sun.sunset).format('HH:mm')}`);
-  },
-  getDate: function getDate(opts, cb) {
-    fillDatePresets();
+  var sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
+  addHours(sun.sunrise, offset);
+  addHours(sun.sunset, offset);
 
-    try {
-      var bDate = getBDate(opts.gDate);
+  var now = getUserNowTime(offset, answers);
 
-      var fromDate = copyAndAddDays(opts.gDate, -1);
+  // times are right for the user, but ignore the timezone!
 
-      cb(null, {
-        raw: bDate,
-        text: `${monthMeaning[bDate.m]} / ${monthAr[bDate.m]} ${bDate.d} goes from sunset on ${gMonthLong[fromDate.getMonth()]} ${fromDate.getDate()} to sunset on ${gMonthLong[opts.gDate.getMonth()]} ${opts.gDate.getDate()}.`
-      });
-    } catch (err) {
-      cb(err.message);
-    }
+  answers.push(`Now: ${moment(now).format('HH:mm')}`);
+  answers.push(`Sunrise: ${moment(sun.sunrise).format('HH:mm')}`);
+  answers.push(`Sunset: ${moment(sun.sunset).format('HH:mm')}`);
+}
+
+function today(profile, answers) {
+  var offset = profile.tzInfo.serverDiff;
+  var coord = profile.coord;
+  var now = getUserNowTime(offset, answers);
+
+  var noon = new Date(now.getTime());
+  noon.setHours(12, 0, 0, 0);
+
+  var sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
+  addHours(sun.sunrise, offset);
+  addHours(sun.sunset, offset);
+
+  var nowHours = now.getHours();
+  if (nowHours >= 5 && nowHours <= 10) {
+    answers.push(`Good morning, ${profile.first_name}.`);
+  } else if (nowHours >= 19 && nowHours <= 22) {
+    answers.push(`Good evening, ${profile.first_name}.`);
+  } else {
+    answers.push(`Hello, ${profile.first_name}.`);
   }
 
-};
+  var bDate = getBDate(now);
+  answers.push(`Today is ${monthMeaning[bDate.m]} ${bDate.d} (${monthAr[bDate.m]}) in the Wondrous calendar!`);
+
+  var nowWhen = moment(now).format('HHmmss');
+  var sunsetWhen = moment(sun.sunset).format('HHmmss');
+  if (nowWhen >= sunsetWhen) {
+    answers.push(`It started with sunset at ${moment(sun.sunset).format('HH:mm')}.`);
+  } else {
+    answers.push(`It lasts until sunset at ${moment(sun.sunset).format('HH:mm')}.`);
+  }
+
+}
+
+function getDate(opts, cb) {
+  try {
+    var bDate = getBDate(opts.gDate);
+
+    var fromDate = copyAndAddDays(opts.gDate, -1);
+
+    cb(null, {
+      raw: bDate,
+      text: `${monthMeaning[bDate.m]} / ${monthAr[bDate.m]} ${bDate.d} goes from sunset on ${gMonthLong[fromDate.getMonth()]} ${fromDate.getDate()} to sunset on ${gMonthLong[opts.gDate.getMonth()]} ${opts.gDate.getDate()}.`
+    });
+  } catch (err) {
+    cb(err.message);
+  }
+}
+
+
+function getUserNowTime(serverDiff, answers) {
+  var now = new Date();
+  if (serverDiff) {
+    now.setHours(now.getHours() + serverDiff);
+  }
+  return now;
+}
+
 
 var getBDate = function (gSourceDate) {
-
+  var now = new Date(gSourceDate.getTime());
   var sunCalcReady = typeof sunCalculator != 'undefined';
-  var pmSunset = new Date(gSourceDate);
+  var pmSunset = new Date(now.getTime());
   if (sunCalcReady) {
     pmSunset.setHours(12);
     pmSunset = sunCalculator.getTimes(pmSunset, _locationLat, _locationLong).sunset;
@@ -52,28 +100,28 @@ var getBDate = function (gSourceDate) {
   }
 
   var afterSunset = false;
-  if (gSourceDate.getTime() >= pmSunset.getTime()) {
+  if (now.getTime() >= pmSunset.getTime()) {
     afterSunset = true;
   }
   // strip off the time
-  gSourceDate.setHours(12, 0, 0, 0, 0);
+  now.setHours(12, 0, 0, 0, 0);
   if (afterSunset) {
     // after sunset? do for following day
-    gSourceDate.setDate(gSourceDate.getDate() + 1);
+    now.setDate(now.getDate() + 1);
   }
-  var gYear = gSourceDate.getFullYear();
+  var gYear = now.getFullYear();
   var gDayOfNawRuz = getNawRuz(gYear, true);
   var gDayLoftiness1 = copyAndAddDays(gDayOfNawRuz, -19);
 
-  var bYear = gYear - (gSourceDate >= gDayOfNawRuz ? 1843 : 1844);
+  var bYear = gYear - (now >= gDayOfNawRuz ? 1843 : 1844);
   var bMonth, bDay;
 
-  var isBeforeLoftiness = gSourceDate < gDayLoftiness1;
+  var isBeforeLoftiness = now < gDayLoftiness1;
   if (isBeforeLoftiness) {
     // back: Jan --> end of AyyamiHa
     var gDayLoftiness1LastYear = copyAndAddDays(getNawRuz(gYear - 1, true), -19);
 
-    var daysAfterLoftiness1LastYear = Math.round((gSourceDate - gDayLoftiness1LastYear) / 864e5);
+    var daysAfterLoftiness1LastYear = Math.round((now - gDayLoftiness1LastYear) / 864e5);
     var numMonthsFromLoftinessLastYear = Math.floor(daysAfterLoftiness1LastYear / 19);
 
     bDay = 1 + daysAfterLoftiness1LastYear - numMonthsFromLoftinessLastYear * 19;
@@ -84,7 +132,7 @@ var getBDate = function (gSourceDate) {
     }
   } else {
     // forward: Loftiness --> Dec
-    var bDaysAfterLoftiness1 = Math.round((gSourceDate - gDayLoftiness1) / 864e5);
+    var bDaysAfterLoftiness1 = Math.round((now - gDayLoftiness1) / 864e5);
     var bNumMonthsFromLoftiness = Math.floor(bDaysAfterLoftiness1 / 19);
 
     bDay = 1 + bDaysAfterLoftiness1 - bNumMonthsFromLoftiness * 19;
@@ -1826,3 +1874,11 @@ function fillDatePresets() {
 var monthMeaning = "Intercalary Days,Splendor,Glory,Beauty,Grandeur,Light,Mercy,Words,Perfection,Names,Might,Will,Knowledge,Power,Speech,Questions,Honor,Sovereignty,Dominion,Loftiness".split(',');
 var monthAr = "Ayyám-i-Há,Bahá,Jalál,Jamál,`Azamat,Núr,Rahmat,Kalimát,Kamál,Asmá’,`Izzat,Mashíyyat,`Ilm,Qudrat,Qawl,Masá'il,Sharaf,Sultán,Mulk,`Alá’".split(',');
 var gMonthLong = "January,February,March,April,May,June,July,August,September,October,November,December".split(',');
+
+
+module.exports = {
+  sunTimes: sunTimes,
+  today: today,
+  getDate: getDate
+};
+

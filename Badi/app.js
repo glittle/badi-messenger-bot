@@ -4,13 +4,19 @@ const Bot = require('messenger-bot');
 const storage = require('node-persist');
 const badiCalc = require('./badiCalc');
 const moment = require('moment');
+const glob = require('glob');
+const fs = require('fs');
+
+var testEvery5seconds = false;
+var manuallyStopped = false;
+var timeout = null;
+
+var storageFolder = 'BadiBotStorage';
+var storagePath = '../../../../' + storageFolder;
 
 storage.initSync({
-  dir: '../../../../BadiBotStorage'
+  dir: storagePath
 });
-
-var timeout = null;
-var manuallyStopped = false;
 
 var secrets = storage.getItem('secrets');
 const timezonedb = require('timezonedb-node')(secrets.timeZoneKey);
@@ -19,10 +25,6 @@ let bot = new Bot({
   token: secrets.botKey,
   verify: 'MyBadiBot'
 });
-
-bot.on('error', (err) => {
-  console.log(err.message)
-})
 
 bot.on('message', (payload, reply) => {
 
@@ -46,17 +48,6 @@ bot.on('message', (payload, reply) => {
   }
 });
 
-function getUserDateInfo(profile) {
-  var userDate = getUserNowTime(profile.tzInfo);
-  //var tz = profile.timezone;
-  //var serverTz = userDate.getTimezoneOffset() / 60;
-  //var hourDifference = serverTz + tz;
-  //userDate.setHours(userDate.getHours() + hourDifference);
-  return {
-    now: userDate,
-    diff: profile.tzInfo.serverDiff
-  };
-}
 
 function respond(reply, profile, log, payloadMessage, key) {
   var senderId = profile.id;
@@ -112,11 +103,8 @@ function respond(reply, profile, log, payloadMessage, key) {
                 }, (err) => {
                   if (err) {
                     console.log(err);
-                  } else {
                   }
                 })
-
-
               } else {
                 console.error(error);
               }
@@ -136,28 +124,60 @@ function respond(reply, profile, log, payloadMessage, key) {
 
 
 
-  var userDateInfo = getUserDateInfo(profile);
-
-  if (question.search(/hello/i) !== -1) {
+  // -------------------------------------------------------
+  if (question.search(/HELLO/i) !== -1) {
     answers.push(`Hello ${profile.first_name}!`);
 
+    if (!profile.tzInfo) {
+      answers.push(`I don't know where you are, yet. Please send me your location, so I can give you the correct date information!`);
+    }
     if (log && log.length) {
-      answers.push(`We have chatted ${log.length} times!`);
+      answers.push(`We have chatted ${log.length} times.`);
     }
   }
 
-  // if "DEV" commands expose secret information, add a whitelist of developers
-  if (question.search(/dev stop/i) !== -1) {
+  // -------------------------------------------------------
+  // if "DEV" commands expose secret information, can add a manual whitelist of developers
+  if (question.search(/DEV STOP/i) !== -1) {
+    // kill-switch
     answers.push('Stopped reminders');
     clearTimeout(timeout);
     manuallyStopped = true;
   }
-  if (question.search(/dev start/i) !== -1) {
+  // -------------------------------------------------------
+  if (question.search(/DEV START/i) !== -1) {
     answers.push('Started reminders');
     prepareReminderTimer();
     manuallyStopped = false;
   }
-  if (question.search(/dev reminders/i) !== -1) {
+  // -------------------------------------------------------
+  if (question.search(/DEV VISITORS/i) !== -1) {
+    answers.push(`Visitors list:`);
+    glob(`../${storageFolder}/*_profile`, {
+
+    }, function (er, files) {
+      if (er) {
+        console.log(er);
+      } else {
+        for (var i = 0; i < files.length; i++) {
+          var p = JSON.parse(fs.readFileSync(files[i], 'utf8'));
+          var info = [p.first_name, p.visitCount];
+          if (p.tzInfo) {
+            info.push(p.tzInfo.countryCode);
+          } else {
+            info.push('no location');}
+          answers.push(info.join('; '));
+        }
+        answers.push(`${files.length} visitors.`);
+      }
+      // files is an array of filenames.
+      // If the `nonull` option is set, and nothing
+      // was found, then files is ["**/*.js"]
+      // er is an error object or null.
+    })
+  }
+  // -------------------------------------------------------
+  if (question.search(/DEV REMINDERS/i) !== -1) {
     answers.push('Reminders set for:');
     var reminders = storage.getItem('reminders') || {};
 
@@ -174,7 +194,8 @@ function respond(reply, profile, log, payloadMessage, key) {
     }
   }
 
-  if (question.search(/clear reminders/i) !== -1) {
+  // -------------------------------------------------------
+  if (question.search(/CLEAR REMINDERS/i) !== -1) {
 
     var numCleared = clearReminders(senderId, answers, true);
     if (numCleared) {
@@ -184,7 +205,8 @@ function respond(reply, profile, log, payloadMessage, key) {
     }
   }
 
-  if (question.search(/remind when/i) !== -1) {
+  // -------------------------------------------------------
+  if (question.search(/REMIND WHEN/i) !== -1) {
     var numCleared = clearReminders(senderId, answers, false);
     if (numCleared === 1) {
       answers.push(`That's the only reminder I have for you, ${profile.first_name}.`);
@@ -195,11 +217,10 @@ function respond(reply, profile, log, payloadMessage, key) {
     }
   }
 
-  if (question.search(/remind at/i) !== -1) {
+  // -------------------------------------------------------
+  if (question.search(/REMIND AT/i) !== -1) {
 
     if (profile.tzInfo) {
-
-      //getUserNowTime(profile.tzInfo)
 
       //dev
       var hourDifference = profile.tzInfo.serverDiff;
@@ -209,61 +230,76 @@ function respond(reply, profile, log, payloadMessage, key) {
       if (matches) {
         hours = +matches[0];
       }
+      var userTime = moment().hours(hours);
+      userTime.minutes(0);
+      userTime.seconds(0);
+      userTime.milliseconds(0);
 
-      answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${hours}:00 about the Badí' date.`);
+      answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${userTime.format('HH:mm')} about the Badí' date.`);
 
-      var serverReminderHour = Math.floor(hours - hourDifference); // don't deal with partial hours
-      if (serverReminderHour > 23) {
-        serverReminderHour = serverReminderHour - 24;
-      }
-      if (serverReminderHour < 0) {
-        serverReminderHour = serverReminderHour + 24;
-      }
+      var serverTime = moment(userTime).subtract(hourDifference, 'hours');
+
+//      var serverReminderHour = Math.floor(hours - hourDifference); // don't deal with partial hours
+//      if (serverReminderHour > 23) {
+//        serverReminderHour = serverReminderHour - 24;
+//      }
+//      if (serverReminderHour < 0) {
+//        serverReminderHour = serverReminderHour + 24;
+//      }
+      var reminderKey = serverTime.format('HH:mm')
 
       // reminders are shared... storage is not multi-user, so use it for very short times!
       var reminders = storage.getItem('reminders') || {};
-      var reminderGroup = reminders[serverReminderHour] || {};
+      var reminderGroup = reminders[reminderKey] || {};
       reminderGroup[senderId] = {
-        profile: profile,
-        userHour: hours
+        diff: hourDifference,
+        userTime: userTime.format('HH:mm')
       }
-      reminders[serverReminderHour] = reminderGroup;
+      reminders[reminderKey] = reminderGroup;
       //console.log(serverReminderHour);
       //console.log(reminders);
       storage.setItem('reminders', reminders);
     } else {
       answers.push('Sorry, I can\'t remind you until I know your location.');
+      answers.push('Please use the Facebook Messenger app to send me your location!');
     }
   }
 
-  if (question.search(/sun times/i) !== -1) {
-    badiCalc.test(profile.tzInfo.serverDiff, profile.coord, answers);
+  // -------------------------------------------------------
+  if (question.search(/SUN TIMES/i) !== -1) {
+    badiCalc.sunTimes(profile, answers);
   }
 
-  if (question.search(/today/i) !== -1) {
+  // -------------------------------------------------------
+  if (question.search(/TODAY/i) !== -1) {
     if (profile.tzInfo) {
       var now = new Date();
+      var userDateInfo = getUserDateInfo(profile);
 
-      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
-        if (err) {
-          answers.push(err);
-        } else {
-          answers.push(`Hi ${profile.first_name}! ` + info.text);
-        }
-      });
-    } else {
-
-      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
-        if (err) {
-          answers.push(err);
-        } else {
-          answers.push(`Hi ${profile.first_name}! ` + info.text);
-        }
-      });
+      badiCalc.today(profile, answers);
+//
+//      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
+//        if (err) {
+//          answers.push(err);
+//        } else {
+//          answers.push(`Hi ${profile.first_name}! ` + info.text);
+//        }
+//      });
+//    } else {
+//
+//      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
+//        if (err) {
+//          answers.push(err);
+//        } else {
+//          answers.push(`Hi ${profile.first_name}! ` + info.text);
+//        }
+//      });
+//    }
     }
   }
 
-  if (!answers.length) {
+  // -------------------------------------------------------
+  if (question.search(/HELP/i) === 0) {
 
     //var userDate = userDateInfo.now;
 
@@ -278,7 +314,11 @@ function respond(reply, profile, log, payloadMessage, key) {
     answers.push('⇒ "hello"\nI\'ll reply with your name.');
     //answers.push('')
     //answers.push(`I'm assuming that it is about ${moment(userDate).format('HH:mm [on] MMMM D')} where you are. If that is not right, please let me know!`);
+  }
 
+  // -------------------------------------------------------
+  if (!answers.length) {
+    answers.push('Say "help" to learn what the bot can understand!');
   }
 
   sendAllAnswers(reply, question, answers, log, profile, key, null);
@@ -287,6 +327,7 @@ function respond(reply, profile, log, payloadMessage, key) {
     prepareReminderTimer();
   }
 }
+
 
 function sendAllAnswers(reply, question, answers, log, profile, key, originalAnswers) {
   if (!originalAnswers) {
@@ -321,21 +362,20 @@ function sendAllAnswers(reply, question, answers, log, profile, key, originalAns
     return;
   }
 
-  if (!log) log = [];
-
+  // get it again
+  log = storage.getItem(key.log) || [];
   log.push({
     when: new Date(),
     question: question,
     answers: originalAnswers
   });
 
-  console.log('storing profile and log');
-
   profile.visitCount = log.length;
 
   storage.setItem(key.profile, profile);
   storage.setItem(key.log, log);
 
+  console.log('stored profile and log');
 }
 
 function prepareReminderTimer() {
@@ -344,12 +384,10 @@ function prepareReminderTimer() {
     return;
   }
 
-  var inDevelopment = false;
-
   // time to next hour
   var now = new Date();
   var nextHour = new Date();
-  if (inDevelopment) {
+  if (testEvery5seconds) {
     nextHour.setTime(now.getTime() + 5 * 1000);
   } else {
     nextHour.setHours(now.getHours() + 1, 0, 0, 0);
@@ -366,15 +404,15 @@ function doReminders() {
   clearTimeout(timeout);
   var reminders = storage.getItem('reminders');
   if (reminders) {
-    var thisHour = new Date().getHours();
-    console.log(`checking reminders for ${thisHour}:00 (server time)`)
+    var serverWhen = moment().format('HH') + ':00';
+    console.log(`checking reminders for ${serverWhen} (server time)`)
 
-    var reminderGroup = reminders[thisHour];
-    if (reminderGroup) {
-      for (var id in reminderGroup) {
-        if (reminderGroup.hasOwnProperty(id)) {
+    var remindersAtWhen = reminders[serverWhen];
+    if (remindersAtWhen) {
+      for (var id in remindersAtWhen) {
+        if (remindersAtWhen.hasOwnProperty(id)) {
           console.log('sending to ' + id);
-          sendReminder(id, reminderGroup[id]);
+          sendReminder(serverWhen, id, remindersAtWhen[id]);
         }
       }
     }
@@ -388,17 +426,20 @@ function clearReminders(currentId, answers, actuallyDelete) {
   // reminders are shared... storage is not multi-user, so use it for very short times!
   var reminders = storage.getItem('reminders') || {};
 
-  for (var hour in reminders) {
-    if (reminders.hasOwnProperty(hour)) {
-      var reminderGroup = reminders[hour];
-      for (var id in reminderGroup) {
+  for (var when in reminders) {
+    if (reminders.hasOwnProperty(when)) {
+      var remindersWhen = reminders[when];
+      for (var id in remindersWhen) {
         if (id === currentId) {
-          var info = reminderGroup[id];
+          var serverTime = moment(when, 'HH:mm');
+          var info = remindersWhen[id];
+          var userTime = moment(serverTime).add(info.diff, 'hours');
+
           if (actuallyDelete) {
-            answers.push(`Removed reminder at ${info.userHour}:00.`);
-            delete reminderGroup[id];
+            answers.push(`Removed reminder at ${userTime.format('HH:mm')}.`);
+            delete remindersWhen[id];
           } else {
-            answers.push(`Reminder set for ${info.userHour}:00.`);
+            answers.push(`Reminder set for ${userTime.format('HH:mm')}.`);
           }
           num++;
         }
@@ -409,17 +450,19 @@ function clearReminders(currentId, answers, actuallyDelete) {
   return num;
 }
 
-function sendReminder(id, info) {
+function sendReminder(serverWhen, id, info) {
   var answers = [];
-  var profile = info.profile;
-  var userDateInfo = getUserDateInfo(profile);
-  var dateInfo = badiDate.getDate({ gDate: userDateInfo.now }, function (err, info) {
-    if (err) {
-      console.log(err);
-    } else {
-      answers.push(`Hello ${profile.first_name}. ` + info.text);
-    }
-  });
+
+  var profile = loadProfile(id);
+  //  var userDateInfo = getUserDateInfo(profile);
+  badiCalc.today(profile, answers);
+//  var dateInfo = badiCalc.today({ gDate: userDateInfo.now }, function (err, info) {
+//    if (err) {
+//      console.log(err);
+//    } else {
+//      answers.push(`Hello ${profile.first_name}. ` + info.text);
+//    }
+//  });
 
   var answerText = answers.join('\n');
 
@@ -429,7 +472,7 @@ function sendReminder(id, info) {
     if (err) {
       console.log(err);
     } else {
-      console.log(`Reminded for ${info.userHour}:00 ${profile.first_name} ${profile.last_name}: ${answerText}`)
+      console.log(`Reminder at ${serverWhen} - ${profile.first_name} ${profile.last_name}: ${answerText}`)
     }
   })
 
@@ -437,9 +480,34 @@ function sendReminder(id, info) {
 
 function getUserNowTime(tzInfo) {
   var now = new Date();
-  now.setHours(now.getHours() + tzInfo.serverDiff);
+  if (tzInfo) {
+    now.setHours(now.getHours() + tzInfo.serverDiff);
+  }
   return now;
 }
+
+
+function getUserDateInfo(profile) {
+  var userDate = getUserNowTime(profile.tzInfo);
+  //var tz = profile.timezone;
+  //var serverTz = userDate.getTimezoneOffset() / 60;
+  //var hourDifference = serverTz + tz;
+  //userDate.setHours(userDate.getHours() + hourDifference);
+  return {
+    now: userDate,
+    diff: profile.tzInfo ? profile.tzInfo.serverDiff : 0
+  };
+}
+
+function loadProfile(id) {
+  var key = id + '_profile';
+  return storage.getItem(key);
+}
+
+
+bot.on('error', (err) => {
+  console.log(err.message)
+})
 
 prepareReminderTimer();
 
