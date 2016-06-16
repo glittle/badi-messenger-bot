@@ -56,7 +56,7 @@ function respond(reply, profile, log, payloadMessage, key) {
 
   if (payloadMessage.text) {
     question = payloadMessage.text;
-    console.log('Incoming (' + (profile.visitCount || 'new') + '): ' + question);
+    console.log('\nIncoming (' + (profile.visitCount || 'new') + '): ' + question);
   } else {
     if (payloadMessage.attachments) {
       for (var i = 0; i < payloadMessage.attachments.length; i++) {
@@ -141,14 +141,14 @@ function respond(reply, profile, log, payloadMessage, key) {
   if (question.search(/DEV STOP/i) !== -1) {
     // kill-switch
     answers.push('Stopped reminders');
-    clearTimeout(timeout);
+    clearInterval(timeout);
     manuallyStopped = true;
   }
   // -------------------------------------------------------
   if (question.search(/DEV START/i) !== -1) {
     answers.push('Started reminders');
-    prepareReminderTimer();
     manuallyStopped = false;
+    prepareReminderTimer();
   }
   // -------------------------------------------------------
   if (question.search(/DEV VISITORS/i) !== -1) {
@@ -181,14 +181,14 @@ function respond(reply, profile, log, payloadMessage, key) {
     answers.push('Reminders set for:');
     var reminders = storage.getItem('reminders') || {};
 
-    for (var hour in reminders) {
-      if (reminders.hasOwnProperty(hour)) {
-        var reminderGroup = reminders[hour];
+    for (var when in reminders) {
+      if (reminders.hasOwnProperty(when)) {
+        var reminderGroup = reminders[when];
         for (var id in reminderGroup) {
           var info = reminderGroup[id];
           var profile = info.profile;
           var tzInfo = profile.tzInfo;
-          answers.push(`${hour} - ${profile.first_name} - ${info.userHour} in ${tzInfo.countryCode} - ${tzInfo.zoneName}.`);
+          answers.push(`${when} - ${profile.first_name} - ${info.userHour} in ${tzInfo.countryCode} - ${tzInfo.zoneName}.`);
         }
       }
     }
@@ -197,7 +197,7 @@ function respond(reply, profile, log, payloadMessage, key) {
   // -------------------------------------------------------
   if (question.search(/CLEAR REMINDERS/i) !== -1) {
 
-    var numCleared = clearReminders(senderId, answers, true);
+    var numCleared = processReminders(senderId, answers, true);
     if (numCleared) {
       answers.push(`Done. I've cleared your reminder(s) and won't send you the daily reminders any more.`);
     } else {
@@ -207,7 +207,7 @@ function respond(reply, profile, log, payloadMessage, key) {
 
   // -------------------------------------------------------
   if (question.search(/REMIND WHEN/i) !== -1) {
-    var numCleared = clearReminders(senderId, answers, false);
+    var numCleared = processReminders(senderId, answers, false);
     if (numCleared === 1) {
       answers.push(`That's the only reminder I have for you, ${profile.first_name}.`);
     } else if (numCleared) {
@@ -225,43 +225,42 @@ function respond(reply, profile, log, payloadMessage, key) {
       //dev
       var hourDifference = profile.tzInfo.serverDiff;
 
-      var hours = 21;
-      var matches = question.match(/\d+/);
+      var hours = '';
+      var matches = question.match(/\d{1,2}(:\d{2,2})?/);
       if (matches) {
-        hours = +matches[0];
+        hours = matches[0];
       }
-      var userTime = moment().hours(hours);
-      userTime.minutes(0);
-      userTime.seconds(0);
-      userTime.milliseconds(0);
+
+
+      var userTime = moment(hours, 'H:mm');
+//      var userTime = moment().hours(hours);
+//      userTime.minutes(0);
+//      userTime.seconds(0);
+//      userTime.milliseconds(0);
 
       answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${userTime.format('HH:mm')} about the Badí' date.`);
 
       var serverTime = moment(userTime).subtract(hourDifference, 'hours');
 
-//      var serverReminderHour = Math.floor(hours - hourDifference); // don't deal with partial hours
-//      if (serverReminderHour > 23) {
-//        serverReminderHour = serverReminderHour - 24;
-//      }
-//      if (serverReminderHour < 0) {
-//        serverReminderHour = serverReminderHour + 24;
-//      }
-      var reminderKey = serverTime.format('HH:mm')
+      var when = serverTime.format('HH:mm')
 
       // reminders are shared... storage is not multi-user, so use it for very short times!
       var reminders = storage.getItem('reminders') || {};
-      var reminderGroup = reminders[reminderKey] || {};
+      var reminderGroup = reminders[when] || {};
       reminderGroup[senderId] = {
         diff: hourDifference,
         userTime: userTime.format('HH:mm')
       }
-      reminders[reminderKey] = reminderGroup;
+      reminders[when] = reminderGroup;
+
       //console.log(serverReminderHour);
       //console.log(reminders);
       storage.setItem('reminders', reminders);
+
     } else {
       answers.push('Sorry, I can\'t remind you until I know your location.');
       answers.push('Please use the Facebook Messenger app to send me your location!');
+
     }
   }
 
@@ -323,9 +322,9 @@ function respond(reply, profile, log, payloadMessage, key) {
 
   sendAllAnswers(reply, question, answers, log, profile, key, null);
 
-  if (!manuallyStopped) {
-    prepareReminderTimer();
-  }
+//  if (!manuallyStopped) {
+//    prepareReminderTimer();
+//  }
 }
 
 
@@ -385,27 +384,30 @@ function prepareReminderTimer() {
   }
 
   // time to next hour
-  var now = new Date();
-  var nextHour = new Date();
-  if (testEvery5seconds) {
-    nextHour.setTime(now.getTime() + 5 * 1000);
-  } else {
-    nextHour.setHours(now.getHours() + 1, 0, 0, 0);
-  }
-  var timeToNextHour = nextHour - now;
+  //var now = new Date();
+  //var nextHour = new Date();
+  //if (testEvery5seconds) {
+  //  nextHour.setTime(now.getTime() + 5 * 1000);
+  //} else {
+  //  nextHour.setHours(now.getHours() + 1, 0, 0, 0);
+  //}
+  //var timeToNextHour = nextHour - now;
 
-  clearTimeout(timeout);
-  timeout = setTimeout(doReminders, timeToNextHour);
+  clearInterval(timeout);
+  timeout = setInterval(doReminders, 1000 * 60);
 
-  console.log(`(Reminders scheduled for ${nextHour.toTimeString()})`);
+  //console.log(`(Reminders scheduled for ${nextHour.toTimeString()})`);
+  console.log(`Reminder interval started for every minute.`);
+
+  doReminders();
 }
 
 function doReminders() {
-  clearTimeout(timeout);
+  //  clearTimeout(timeout);
   var reminders = storage.getItem('reminders');
   if (reminders) {
-    var serverWhen = moment().format('HH') + ':00';
-    console.log(`checking reminders for ${serverWhen} (server time)`)
+    var serverWhen = moment().format('HH:mm');
+    process.stdout.write(`\rchecking reminders for ${serverWhen} (server time)`)
 
     var remindersAtWhen = reminders[serverWhen];
     if (remindersAtWhen) {
@@ -418,9 +420,9 @@ function doReminders() {
     }
   }
 
-  prepareReminderTimer();
+//  prepareReminderTimer();
 }
-function clearReminders(currentId, answers, actuallyDelete) {
+function processReminders(currentId, answers, deleteReminders) {
   var num = 0;
 
   // reminders are shared... storage is not multi-user, so use it for very short times!
@@ -428,16 +430,16 @@ function clearReminders(currentId, answers, actuallyDelete) {
 
   for (var when in reminders) {
     if (reminders.hasOwnProperty(when)) {
-      var remindersWhen = reminders[when];
-      for (var id in remindersWhen) {
+      var remindersAtWhen = reminders[when];
+      for (var id in remindersAtWhen) {
         if (id === currentId) {
           var serverTime = moment(when, 'HH:mm');
-          var info = remindersWhen[id];
+          var info = remindersAtWhen[id];
           var userTime = moment(serverTime).add(info.diff, 'hours');
 
-          if (actuallyDelete) {
+          if (deleteReminders) {
             answers.push(`Removed reminder at ${userTime.format('HH:mm')}.`);
-            delete remindersWhen[id];
+            delete remindersAtWhen[id];
           } else {
             answers.push(`Reminder set for ${userTime.format('HH:mm')}.`);
           }
