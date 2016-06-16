@@ -165,7 +165,8 @@ function respond(reply, profile, log, payloadMessage, key) {
           if (p.tzInfo) {
             info.push(p.tzInfo.countryCode);
           } else {
-            info.push('no location');}
+            info.push('no location');
+          }
           answers.push(info.join('; '));
         }
         answers.push(`${files.length} visitors.`);
@@ -226,37 +227,43 @@ function respond(reply, profile, log, payloadMessage, key) {
       var hourDifference = profile.tzInfo.serverDiff;
 
       var hours = '';
+      var when = '';
+      var details = {
+        diff: hourDifference
+      };
       var matches = question.match(/\d{1,2}(:\d{2,2})?/);
       if (matches) {
         hours = matches[0];
       }
+      if (hours) {
+        var userTime = moment(hours, 'H:mm');
+        answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${userTime
+          .format('HH:mm')} about the Badí' date.`);
 
+        when = moment(userTime).subtract(hourDifference, 'hours').format('HH:mm');
+        details.userTime = userTime.format('HH:mm');
+      } else {
+        matches = question.match(/(sunset|sunrise){1}/i);
+        if (matches) {
+          when = matches[0];
+          details.coord = profile.coord;
 
-      var userTime = moment(hours, 'H:mm');
-//      var userTime = moment().hours(hours);
-//      userTime.minutes(0);
-//      userTime.seconds(0);
-//      userTime.milliseconds(0);
-
-      answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${userTime.format('HH:mm')} about the Badí' date.`);
-
-      var serverTime = moment(userTime).subtract(hourDifference, 'hours');
-
-      var when = serverTime.format('HH:mm')
-
-      // reminders are shared... storage is not multi-user, so use it for very short times!
-      var reminders = storage.getItem('reminders') || {};
-      var reminderGroup = reminders[when] || {};
-      reminderGroup[senderId] = {
-        diff: hourDifference,
-        userTime: userTime.format('HH:mm')
+          answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${when} about the current Badí' date.`);
+        }
       }
-      reminders[when] = reminderGroup;
 
-      //console.log(serverReminderHour);
-      //console.log(reminders);
-      storage.setItem('reminders', reminders);
+      if (when) {
+        // reminders are shared... storage is not multi-user, so use it for very short times!
+        var reminders = storage.getItem('reminders') || {};
+        var reminderGroup = reminders[when] || {};
+        reminderGroup[senderId] = details;
+        reminders[when] = reminderGroup;
+        storage.setItem('reminders', reminders);
 
+      } else {
+        answers.push("Please include 'sunset', 'sunrise', or give a time like 21:30.");
+
+      }
     } else {
       answers.push('Sorry, I can\'t remind you until I know your location.');
       answers.push('Please use the Facebook Messenger app to send me your location!');
@@ -276,24 +283,24 @@ function respond(reply, profile, log, payloadMessage, key) {
       var userDateInfo = getUserDateInfo(profile);
 
       badiCalc.today(profile, answers);
-//
-//      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
-//        if (err) {
-//          answers.push(err);
-//        } else {
-//          answers.push(`Hi ${profile.first_name}! ` + info.text);
-//        }
-//      });
-//    } else {
-//
-//      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
-//        if (err) {
-//          answers.push(err);
-//        } else {
-//          answers.push(`Hi ${profile.first_name}! ` + info.text);
-//        }
-//      });
-//    }
+      //
+      //      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
+      //        if (err) {
+      //          answers.push(err);
+      //        } else {
+      //          answers.push(`Hi ${profile.first_name}! ` + info.text);
+      //        }
+      //      });
+      //    } else {
+      //
+      //      var dateInfo = badiCalc.getDate({ gDate: userDateInfo.now }, function (err, info) {
+      //        if (err) {
+      //          answers.push(err);
+      //        } else {
+      //          answers.push(`Hi ${profile.first_name}! ` + info.text);
+      //        }
+      //      });
+      //    }
     }
   }
 
@@ -322,9 +329,9 @@ function respond(reply, profile, log, payloadMessage, key) {
 
   sendAllAnswers(reply, question, answers, log, profile, key, null);
 
-//  if (!manuallyStopped) {
-//    prepareReminderTimer();
-//  }
+  //  if (!manuallyStopped) {
+  //    prepareReminderTimer();
+  //  }
 }
 
 
@@ -420,7 +427,7 @@ function doReminders() {
     }
   }
 
-//  prepareReminderTimer();
+  //  prepareReminderTimer();
 }
 function processReminders(currentId, answers, deleteReminders) {
   var num = 0;
@@ -433,15 +440,15 @@ function processReminders(currentId, answers, deleteReminders) {
       var remindersAtWhen = reminders[when];
       for (var id in remindersAtWhen) {
         if (id === currentId) {
-          var serverTime = moment(when, 'HH:mm');
           var info = remindersAtWhen[id];
-          var userTime = moment(serverTime).add(info.diff, 'hours');
+
+          //TODO if remove sunset, find reminder at actual time!
 
           if (deleteReminders) {
-            answers.push(`Removed reminder at ${userTime.format('HH:mm')}.`);
             delete remindersAtWhen[id];
+            answers.push(`Removed reminder at ${info.userTime || when}.`);
           } else {
-            answers.push(`Reminder set for ${userTime.format('HH:mm')}.`);
+            answers.push(`Reminder set for ${info.userTime || when}.`);
           }
           num++;
         }
@@ -458,13 +465,13 @@ function sendReminder(serverWhen, id, info) {
   var profile = loadProfile(id);
   //  var userDateInfo = getUserDateInfo(profile);
   badiCalc.today(profile, answers);
-//  var dateInfo = badiCalc.today({ gDate: userDateInfo.now }, function (err, info) {
-//    if (err) {
-//      console.log(err);
-//    } else {
-//      answers.push(`Hello ${profile.first_name}. ` + info.text);
-//    }
-//  });
+  //  var dateInfo = badiCalc.today({ gDate: userDateInfo.now }, function (err, info) {
+  //    if (err) {
+  //      console.log(err);
+  //    } else {
+  //      answers.push(`Hello ${profile.first_name}. ` + info.text);
+  //    }
+  //  });
 
   var answerText = answers.join('\n');
 
