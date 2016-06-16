@@ -129,7 +129,7 @@ function respond(reply, profile, log, payloadMessage, key) {
     answers.push(`Hello ${profile.first_name}!`);
 
     if (!profile.tzInfo) {
-      answers.push(`I don't know where you are, yet. Please send me your location, so I can give you the correct date information!`);
+      answers.push(`I don't know where you are! Please send me your Location using the Facebook Messenger mobile app, so I can give you the correct date information!`);
     }
     if (log && log.length) {
       answers.push(`We have chatted ${log.length} times.`);
@@ -237,11 +237,14 @@ function respond(reply, profile, log, payloadMessage, key) {
       }
       if (hours) {
         var userTime = moment(hours, 'H:mm');
-        answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${userTime
-          .format('HH:mm')} about the Badí' date.`);
 
-        when = moment(userTime).subtract(hourDifference, 'hours').format('HH:mm');
-        details.userTime = userTime.format('HH:mm');
+        if (userTime.isValid()) {
+          answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${userTime
+            .format('HH:mm')} about the Badí' date.`);
+
+          when = moment(userTime).subtract(hourDifference, 'hours').format('HH:mm');
+          details.userTime = userTime.format('HH:mm');
+        }
       } else {
         matches = question.match(/(sunset|sunrise){1}/i);
         if (matches) {
@@ -261,7 +264,7 @@ function respond(reply, profile, log, payloadMessage, key) {
         storage.setItem('reminders', reminders);
 
       } else {
-        answers.push("Please include 'sunset', 'sunrise', or give a time like 21:30.");
+        answers.push("Please include 'sunset' or give a time, like 21:30.");
 
       }
     } else {
@@ -312,12 +315,14 @@ function respond(reply, profile, log, payloadMessage, key) {
     answers.push('Here are the phrases that you can use when talking with me.');
     answers.push('');
     answers.push('⇒ "today"\nI\'ll tell you what Badí\' day it is now.');
-    answers.push('');
-    answers.push(`⇒ "remind at" 21:00\nI\'ll send you a reminder of Badí' date at the top of that hour. Use any hour from 0 - 23.`)
-    answers.push('⇒ "remind when"?\nI\'ll show you when I plan to remind you.')
-    answers.push('⇒ "clear reminders"\nI\'ll stop reminding you.')
-    answers.push('');
     answers.push('⇒ "hello"\nI\'ll reply with your name.');
+    answers.push('');
+    answers.push('After you send me your Location using the Facebook Messenger mobile app, I can send you reminders:');
+    answers.push('');
+    answers.push(`⇒ "remind at 21:30" or "remind at sunset"\nI\'ll send you reminders of Badí' date at those time(s).`)
+    answers.push('⇒ "remind when"?\nI\'ll show you when I plan to remind you.')
+    answers.push('⇒ "clear reminders"\nI\'ll stop seding you reminder.')
+    answers.push('');
     //answers.push('')
     //answers.push(`I'm assuming that it is about ${moment(userDate).format('HH:mm [on] MMMM D')} where you are. If that is not right, please let me know!`);
   }
@@ -434,6 +439,7 @@ function processReminders(currentId, answers, deleteReminders) {
 
   // reminders are shared... storage is not multi-user, so use it for very short times!
   var reminders = storage.getItem('reminders') || {};
+  var saveNeeded = false;
 
   for (var when in reminders) {
     if (reminders.hasOwnProperty(when)) {
@@ -453,9 +459,15 @@ function processReminders(currentId, answers, deleteReminders) {
           num++;
         }
       }
+      if (Object.keys(remindersAtWhen).length === 0) {
+        delete reminders[when];
+        saveNeeded = true;
+      }
     }
   }
-  storage.setItem('reminders', reminders);
+  if (saveNeeded || (num > 0 && deleteReminders)) {
+    storage.setItem('reminders', reminders);
+  }
   return num;
 }
 
