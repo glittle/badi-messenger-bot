@@ -20,7 +20,7 @@ function sunTimes(profile, answers) {
   addHours(sun.sunrise, offset);
   addHours(sun.sunset, offset);
 
-  var now = getUserNowTime(offset, answers);
+  var now = getUserNowTime(offset);
 
   // times are right for the user, but ignore the timezone!
 
@@ -29,10 +29,24 @@ function sunTimes(profile, answers) {
   answers.push(`Sunset: ${moment(sun.sunset).format('HH:mm')}`);
 }
 
-function today(profile, answers) {
+function getSunTimes(profile) {
   var offset = profile.tzInfo.serverDiff;
   var coord = profile.coord;
-  var now = getUserNowTime(offset, answers);
+  var noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+
+  var sunTimes = sunCalc.getTimes(noon, coord.lat, coord.lng);
+  addHours(sunTimes.sunrise, offset);
+  addHours(sunTimes.sunset, offset);
+
+  // times are right for the user, but ignore the timezone!
+  return sunTimes;
+}
+
+function addTodayInfoToAnswers(profile, answers) {
+  var offset = profile.tzInfo.serverDiff;
+  var coord = profile.coord;
+  var now = getUserNowTime(offset);
 
   var noon = new Date(now.getTime());
   noon.setHours(12, 0, 0, 0);
@@ -53,8 +67,8 @@ function today(profile, answers) {
   var bDate = getBDate(now);
   answers.push(`Today is ${monthMeaning[bDate.m]} ${bDate.d} (${monthAr[bDate.m]}) in the Wondrous calendar!`);
 
-  var nowWhen = moment(now).format('HHmmss');
-  var sunsetWhen = moment(sun.sunset).format('HHmmss');
+  var nowWhen = moment(now).format('HHmm');
+  var sunsetWhen = moment(sun.sunset).format('HHmm');
   if (nowWhen >= sunsetWhen) {
     answers.push(`It started with sunset at ${moment(sun.sunset).format('HH:mm')}.`);
   } else {
@@ -79,7 +93,7 @@ function getDate(opts, cb) {
 }
 
 
-function getUserNowTime(serverDiff, answers) {
+function getUserNowTime(serverDiff) {
   var now = new Date();
   if (serverDiff) {
     now.setHours(now.getHours() + serverDiff);
@@ -1878,7 +1892,8 @@ var gMonthLong = "January,February,March,April,May,June,July,August,September,Oc
 
 module.exports = {
   sunTimes: sunTimes,
-  today: today,
-  getDate: getDate
+  addTodayInfoToAnswers: addTodayInfoToAnswers,
+  getDate: getDate,
+  getSunTimes: getSunTimes
 };
 
