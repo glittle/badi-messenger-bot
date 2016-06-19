@@ -11,12 +11,17 @@ const sunCalcReady = false;
 fillDatePresets();
 
 function sunTimes(profile, answers) {
-  var offset = profile.tzInfo.serverDiff;
   var coord = profile.coord;
+  if (!coord) {
+    answers.push('Sorry. I don\'t know where you are, so can\'t tell you when sunset is.');
+    return;
+  }
+
   var noon = new Date();
   noon.setHours(12, 0, 0, 0);
 
   var sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
+  var offset = profile.tzInfo.serverDiff;
   addHours(sun.sunrise, offset);
   addHours(sun.sunset, offset);
 
@@ -69,7 +74,9 @@ function addTodayInfoToAnswers(profile, answers) {
 
   var nowWhen = moment(now).format('HHmm');
   var sunsetWhen = moment(sun.sunset).format('HHmm');
-  if (nowWhen >= sunsetWhen) {
+  if (nowWhen = sunsetWhen) {
+    answers.push(`It just started with sunset at ${moment(sun.sunset).format('HH:mm')}!`);
+  } else if (nowWhen >= sunsetWhen) {
     answers.push(`It started with sunset at ${moment(sun.sunset).format('HH:mm')}.`);
   } else {
     answers.push(`It lasts until sunset at ${moment(sun.sunset).format('HH:mm')}.`);

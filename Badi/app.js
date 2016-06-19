@@ -38,13 +38,15 @@ bot.on('message', (payload, reply) => {
   var profile = storage.getItem(key.profile);
   var log = storage.getItem(key.log);
 
+  var sorryMsg = 'Oops... I had a problem just now. Sorry I wasn\'t able to reply. ' +
+    'My programmer will have to fix something!';
+
   if (profile) {
     try {
       respond(reply, profile, log, payload.message, key);
     } catch (e) {
-      console.log(e);
-      console.log(e.stacktrace);
-      bot.sendMessage(profile.id, { text: 'Oops... I have a problem. Sorry I can\'t help right now.' });
+      console.log(e.stack);
+      bot.sendMessage(profile.id, { text: sorryMsg });
     }
   } else {
     bot.getProfile(payload.sender.id, (err, profile) => {
@@ -53,9 +55,8 @@ bot.on('message', (payload, reply) => {
       try {
         respond(reply, profile, log, payload.message, key);
       } catch (e) {
-        console.log(e);
-        console.log(e.stacktrace);
-        bot.sendMessage(profile.id, { text: 'Oops... I have a problem. Sorry I can\'t help right now.' });
+        console.log(e.stack);
+        bot.sendMessage(profile.id, { text: sorryMsg });
       }
     });
   }
@@ -69,7 +70,7 @@ function respond(reply, profile, log, payloadMessage, key) {
 
   if (payloadMessage.text) {
     question = payloadMessage.text;
-    console.log('\nIncoming (' + (profile.visitCount || 'new') + '): ' + question);
+    console.log(`\nIncoming (${profile.first_name} ${profile.last_name} - ${profile.visitCount || 'new'}): ${question}`);
   } else {
     if (payloadMessage.attachments) {
       for (var i = 0; i < payloadMessage.attachments.length; i++) {
@@ -296,8 +297,8 @@ function respond(reply, profile, log, payloadMessage, key) {
   // -------------------------------------------------------
   if (question.search(/TODAY/i) !== -1) {
     if (profile.tzInfo) {
-      var now = new Date();
-      var userDateInfo = getUserDateInfo(profile);
+//      var now = new Date();
+//      var userDateInfo = getUserDateInfo(profile);
 
       badiCalc.addTodayInfoToAnswers(profile, answers);
     }
