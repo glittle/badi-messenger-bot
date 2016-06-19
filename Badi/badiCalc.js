@@ -38,7 +38,7 @@ function getSunTimes(profile) {
   var offset = profile.tzInfo.serverDiff;
   var coord = profile.coord;
   var noon = new Date();
-  noon.setHours(12, 0, 0, 0);
+  noon.setHours(12 + offset, 0, 0, 0);
 
   var sunTimes = sunCalc.getTimes(noon, coord.lat, coord.lng);
   addHours(sunTimes.sunrise, offset);
@@ -53,12 +53,13 @@ function addTodayInfoToAnswers(profile, answers) {
   var coord = profile.coord;
   var now = getUserNowTime(offset);
 
-  var noon = new Date(now.getTime());
-  noon.setHours(12, 0, 0, 0);
+  var bDateInfo = getBDateInfo(now, coord, offset);
+  var bDate = bDateInfo.bDate;
 
-  var sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
-  addHours(sun.sunrise, offset);
-  addHours(sun.sunset, offset);
+//  var noon = new Date(now.getTime());
+//  noon.setHours(12, 0, 0, 0);
+//  var sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
+//  addHours(sun.sunset, offset);
 
   var nowHours = now.getHours();
   if (nowHours >= 5 && nowHours <= 10) {
@@ -69,35 +70,50 @@ function addTodayInfoToAnswers(profile, answers) {
     answers.push(`Hello, ${profile.first_name}.`);
   }
 
-  var bDate = getBDate(now);
   answers.push(`Today is ${monthMeaning[bDate.m]} ${bDate.d} (${monthAr[bDate.m]}) in the Wondrous calendar!`);
 
-  var nowWhen = moment(now).format('HHmm');
-  var sunsetWhen = moment(sun.sunset).format('HHmm');
-  if (nowWhen = sunsetWhen) {
-    answers.push(`It just started with sunset at ${moment(sun.sunset).format('HH:mm')}!`);
-  } else if (nowWhen >= sunsetWhen) {
-    answers.push(`It started with sunset at ${moment(sun.sunset).format('HH:mm')}.`);
+  if (bDateInfo.endingSunset) {
+    answers.push(`It lasts until sunset at ${moment(bDateInfo.endingSunset).format('HH:mm')}.`);
   } else {
-    answers.push(`It lasts until sunset at ${moment(sun.sunset).format('HH:mm')}.`);
+    var startingSunset = bDateInfo.startingSunset;
+    var nowWhen = moment(now).format('HHmm');
+    var sunsetWhen = moment(startingSunset).format('HHmm');
+    if (nowWhen = sunsetWhen) {
+      answers.push(`It just started with sunset at ${moment(startingSunset).format('HH:mm')}!`);
+    } else {
+      answers.push(`It started with sunset at ${moment(startingSunset).format('HH:mm')}.`);
+    } 
   }
+//  var nowWhen = moment(now).format('HHmm');
+//  var sunsetWhen = moment(sun.sunset).format('HHmm');
+//  if (nowWhen = sunsetWhen) {
+//    answers.push(`It just started with sunset at ${moment(sun.sunset).format('HH:mm')}!`);
+//  } else if (nowWhen >= sunsetWhen) {
+//    answers.push(`It started with sunset at ${moment(sun.sunset).format('HH:mm')}.`);
+//  } else {
+//    // move to tomorrow
+//    noon.setHours(noon.getHours() + 24, 0, 0, 0);
+//    sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
+//    addHours(sun.sunset, offset);
+//    answers.push(`It lasts until sunset at ${moment(sun.sunset).format('HH:mm')}.`);
+//  }
 
 }
 
-function getDate(opts, cb) {
-  try {
-    var bDate = getBDate(opts.gDate);
+//function getDate(opts, cb) {
+//  try {
+//    var bDate = getBDate(opts.gDate);
 
-    var fromDate = copyAndAddDays(opts.gDate, -1);
+//    var fromDate = copyAndAddDays(opts.gDate, -1);
 
-    cb(null, {
-      raw: bDate,
-      text: `${monthMeaning[bDate.m]} / ${monthAr[bDate.m]} ${bDate.d} goes from sunset on ${gMonthLong[fromDate.getMonth()]} ${fromDate.getDate()} to sunset on ${gMonthLong[opts.gDate.getMonth()]} ${opts.gDate.getDate()}.`
-    });
-  } catch (err) {
-    cb(err.message);
-  }
-}
+//    cb(null, {
+//      raw: bDate,
+//      text: `${monthMeaning[bDate.m]} / ${monthAr[bDate.m]} ${bDate.d} goes from sunset on ${gMonthLong[fromDate.getMonth()]} ${fromDate.getDate()} to sunset on ${gMonthLong[opts.gDate.getMonth()]} ${opts.gDate.getDate()}.`
+//    });
+//  } catch (err) {
+//    cb(err.message);
+//  }
+//}
 
 
 function getUserNowTime(serverDiff) {
@@ -109,21 +125,21 @@ function getUserNowTime(serverDiff) {
 }
 
 
-var getBDate = function (gSourceDate) {
+var getBDateInfo = function (gSourceDate, coord, offset) {
   var now = new Date(gSourceDate.getTime());
-  var sunCalcReady = typeof sunCalculator != 'undefined';
   var pmSunset = new Date(now.getTime());
-  if (sunCalcReady) {
-    pmSunset.setHours(12);
-    pmSunset = sunCalculator.getTimes(pmSunset, _locationLat, _locationLong).sunset;
-  } else {
-    pmSunset.setHours(18, 30, 0, 0);
-  }
+  pmSunset.setHours(12);
+
+  var sunTimes = sunCalc.getTimes(pmSunset, coord.lat, coord.lng);
+  pmSunset = sunTimes.sunset;
 
   var afterSunset = false;
   if (now.getTime() >= pmSunset.getTime()) {
     afterSunset = true;
   }
+
+  addHours(pmSunset, offset);
+
   // strip off the time
   now.setHours(12, 0, 0, 0, 0);
   if (afterSunset) {
@@ -164,7 +180,11 @@ var getBDate = function (gSourceDate) {
     }
   }
 
-  return { y: bYear, m: bMonth, d: bDay, eve: afterSunset };
+  return {
+    bDate: { y: bYear, m: bMonth, d: bDay, eve: afterSunset },
+    startingSunset: afterSunset ? pmSunset : null,
+    endingSunset: afterSunset ? null : pmSunset
+  };
 };
 
 function getNawRuz(gYear, frag2DateOnly) {
@@ -184,12 +204,12 @@ function getNawRuz(gYear, frag2DateOnly) {
   }
 
   var eveSunset = new Date(nawRuz);
-  if (typeof sunCalculator != 'undefined') {
-    nawRuz = sunCalculator.getTimes(eveSunset, _locationLat, _locationLong).sunset;
-  } else {
-    // default to 6:30pm
-    eveSunset.setHours(18, 30, 0, 0);
-  }
+  //  if (typeof sunCalculator != 'undefined') {
+  nawRuz = sunCalculator.getTimes(eveSunset, _locationLat, _locationLong).sunset;
+  //  } else {
+  //    // default to 6:30pm
+  //    eveSunset.setHours(18, 30, 0, 0);
+  //  }
   return nawRuz;
 };
 
@@ -1900,7 +1920,6 @@ var gMonthLong = "January,February,March,April,May,June,July,August,September,Oc
 module.exports = {
   sunTimes: sunTimes,
   addTodayInfoToAnswers: addTodayInfoToAnswers,
-  getDate: getDate,
   getSunTimes: getSunTimes
 };
 
