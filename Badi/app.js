@@ -4,7 +4,7 @@ const Bot = require('messenger-bot');
 const storage = require('node-persist');
 const badiCalc = require('./badiCalc');
 const sunCalc = require('./sunCalc');
-const moment = require('moment');
+const moment = require('moment-timezone');
 const glob = require('glob');
 const fs = require('fs');
 
@@ -237,8 +237,9 @@ function respond(reply, profile, log, payloadMessage, key) {
       var hours = '';
       var when = '';
       var details = {
-        diff: hourDifference
-      };
+        diff: hourDifference,
+        zoneName: profile.tzInfo.zoneName
+    };
       var matches = question.match(/\d{1,2}(:\d{2,2})?/);
       if (matches) {
         hours = matches[0];
@@ -259,10 +260,10 @@ function respond(reply, profile, log, payloadMessage, key) {
           when = matches[0];
           details.coord = profile.coord;
 
-          var sunTimes = badiCalc.getSunTimes(profile);
+//          var sunTimes = badiCalc.getSunTimes(profile);
 
           answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${when} about the current Badí' date.`);
-          answers.push(`\nToday's ${when}: ${moment(sunTimes[when]).format('HH:mm')}`);
+//          answers.push(`\nToday's ${when}: ${moment(sunTimes[when]).format('HH:mm')}`);
 
           setTimeout(function () {
             processSuntimes(profile.id);
@@ -285,21 +286,17 @@ function respond(reply, profile, log, payloadMessage, key) {
     } else {
       answers.push('Sorry, I can\'t remind you until I know your location.');
       answers.push('Please use the Facebook Messenger app to send me your location!');
-
     }
   }
 
   // -------------------------------------------------------
   if (question.search(/SUN TIMES/i) !== -1) {
-    badiCalc.sunTimes(profile, answers);
+    badiCalc.addSunTimes(profile, answers);
   }
 
   // -------------------------------------------------------
-  if (question.search(/TODAY/i) !== -1) {
+  if (question.search(/TODAY/i) !== -1 || question.search(/^NOW$/i) !== -1) {
     if (profile.tzInfo) {
-//      var now = new Date();
-//      var userDateInfo = getUserDateInfo(profile);
-
       badiCalc.addTodayInfoToAnswers(profile, answers);
     }
   }
@@ -397,7 +394,7 @@ function prepareReminderTimer() {
 function processSuntimes(id) {
   console.log('process suntimes ' + id);
 
-  var now = moment().add(1, 'minutes').toDate(); // needs to be at least one minute in the future!
+  var now = moment.tz().add(1, 'minutes').toDate(); // needs to be at least one minute in the future!
   var noon = moment().hours(12);
   var noonTomorrow = moment(noon).add(1, 'days');
 
@@ -540,7 +537,6 @@ function processReminders(currentId, answers, deleteReminders) {
 
 function sendReminder(serverWhen, id, info) {
   var answers = [];
-  console.log(info);
   var profile = loadProfile(id);
 
   badiCalc.addTodayInfoToAnswers(profile, answers);
@@ -559,22 +555,22 @@ function sendReminder(serverWhen, id, info) {
 
 }
 
-function getUserNowTime(tzInfo) {
-  var now = new Date();
-  if (tzInfo) {
-    now.setHours(now.getHours() + tzInfo.serverDiff);
-  }
-  return now;
-}
+//function getUserNowTime(tzInfo) {
+//  var now = new Date();
+//  if (tzInfo) {
+//    now.setHours(now.getHours() + tzInfo.serverDiff);
+//  }
+//  return now;
+//}
 
 
-function getUserDateInfo(profile) {
-  var userDate = getUserNowTime(profile.tzInfo);
-  return {
-    now: userDate,
-    diff: profile.tzInfo ? profile.tzInfo.serverDiff : 0
-  };
-}
+//function getUserDateInfo(profile) {
+//  var userDate = getUserNowTime(profile.tzInfo);
+//  return {
+//    now: userDate,
+//    diff: profile.tzInfo ? profile.tzInfo.serverDiff : 0
+//  };
+//}
 
 function loadProfile(id) {
   var key = id + '_profile';

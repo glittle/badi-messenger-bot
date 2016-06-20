@@ -1,7 +1,7 @@
 'use strict'
 
 const sunCalc = require('./sunCalc');
-const moment = require('moment');
+const moment = require('moment-timezone');
 
 var _nawRuzOffsetFrom21 = [];
 var _twinHolyBirthdays = [];
@@ -10,58 +10,84 @@ const sunCalcReady = false;
 
 fillDatePresets();
 
-function sunTimes(profile, answers) {
+function addSunTimes(profile, answers) {
   var coord = profile.coord;
   if (!coord) {
     answers.push('Sorry. I don\'t know where you are, so can\'t tell you when sunset is.');
     return;
   }
+  var readableFormat = 'MMM D, HH:mm';
 
-  var noon = new Date();
-  noon.setHours(12, 0, 0, 0);
+  var zoneName = profile.tzInfo.zoneName;
+  var now = moment.tz(zoneName);
+  var noon = moment(now).hour(12).minute(0).second(0);
+  var tomorrowNoon = moment(noon).add(24, 'hours');
 
-  var sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
-  var offset = profile.tzInfo.serverDiff;
-  addHours(sun.sunrise, offset);
-  addHours(sun.sunset, offset);
+  var sun1 = sunCalc.getTimes(noon, coord.lat, coord.lng);
+  var sunrise1 = moment.tz(sun1.sunrise, zoneName)
+  var sunset1 = moment.tz(sun1.sunset, zoneName)
 
-  var now = getUserNowTime(offset);
+  if (now.isAfter(sunset1)) {
+    // eve of day1 into day2
+    answers.push(`Starting Sunset: ${sunset1.format(readableFormat)}`);
 
-  // times are right for the user, but ignore the timezone!
+    var sun2 = sunCalc.getTimes(moment(noon).add(24, 'hours'), coord.lat, coord.lng);
+    var sunrise2 = moment.tz(sun2.sunrise, zoneName)
+    var sunset2 = moment.tz(sun2.sunset, zoneName)
 
-  answers.push(`Now: ${moment(now).format('HH:mm')}`);
-  answers.push(`Sunrise: ${moment(sun.sunrise).format('HH:mm')}`);
-  answers.push(`Sunset: ${moment(sun.sunset).format('HH:mm')}`);
+    if (now.isBefore(sunrise2)) {
+      answers.push(`Now: ${now.format(readableFormat)}`);
+      answers.push(`Sunrise: ${sunrise2.format(readableFormat)}`);
+    } else {
+      answers.push(`Sunrise: ${sunrise2.format(readableFormat)}`);
+      answers.push(`Now: ${now.format(readableFormat)}`);
+    }
+    answers.push(`Ending Sunset: ${sunset2.format(readableFormat)}`);
+  } else {
+    // get prior sunset
+    var sun0 = sunCalc.getTimes(moment(noon).subtract(24, 'hours'), coord.lat, coord.lng);
+    var sunset0 = moment.tz(sun0.sunset, zoneName)
+
+    answers.push(`Starting Sunset: ${sunset0.format(readableFormat)}`);
+    if (now.isBefore(sunrise1)) {
+      answers.push(`Now: ${now.format(readableFormat)}`);
+      answers.push(`Sunrise: ${sunrise1.format(readableFormat)}`);
+    } else {
+      answers.push(`Sunrise: ${sunrise1.format(readableFormat)}`);
+      answers.push(`Now: ${now.format(readableFormat)}`);
+    }
+    answers.push(`Ending Sunset: ${sunset1.format(readableFormat)}`);
+  }
 }
 
-function getSunTimes(profile) {
-  var offset = profile.tzInfo.serverDiff;
-  var coord = profile.coord;
-  var noon = new Date();
-  noon.setHours(12 + offset, 0, 0, 0);
-
-  var sunTimes = sunCalc.getTimes(noon, coord.lat, coord.lng);
-  addHours(sunTimes.sunrise, offset);
-  addHours(sunTimes.sunset, offset);
-
-  // times are right for the user, but ignore the timezone!
-  return sunTimes;
-}
+//function getSunTimes(profile) {
+//  var offset = profile.tzInfo.serverDiff;
+//  var coord = profile.coord;
+//  var noon = new Date();
+//  noon.setHours(12 + offset, 0, 0, 0);
+//
+//  var sunTimes = sunCalc.getTimes(noon, coord.lat, coord.lng);
+//  addHours(sunTimes.sunrise, offset);
+//  addHours(sunTimes.sunset, offset);
+//
+//  // times are right for the user, but ignore the timezone!
+//  return sunTimes;
+//}
 
 function addTodayInfoToAnswers(profile, answers) {
-  var offset = profile.tzInfo.serverDiff;
-  var coord = profile.coord;
-  var now = getUserNowTime(offset);
+  var zoneName = profile.tzInfo.zoneName;
+  var nowTz = moment.tz(zoneName);
 
-  var bDateInfo = getBDateInfo(now, coord, offset);
+  var coord = profile.coord;
+  var bDateInfo = getBDateInfo(nowTz, coord, zoneName);
   var bDate = bDateInfo.bDate;
 
-//  var noon = new Date(now.getTime());
-//  noon.setHours(12, 0, 0, 0);
-//  var sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
-//  addHours(sun.sunset, offset);
+  //  var noon = new Date(now.getTime());
+  //  noon.setHours(12, 0, 0, 0);
+  //  var sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
+  //  addHours(sun.sunset, offset);
 
-  var nowHours = now.getHours();
+  var nowHours = nowTz.hours();
   if (nowHours >= 5 && nowHours <= 10) {
     answers.push(`Good morning, ${profile.first_name}.`);
   } else if (nowHours >= 19 && nowHours <= 22) {
@@ -72,93 +98,65 @@ function addTodayInfoToAnswers(profile, answers) {
 
   answers.push(`Today is ${monthMeaning[bDate.m]} ${bDate.d} (${monthAr[bDate.m]}) in the Wondrous calendar!`);
 
-  if (bDateInfo.endingSunset) {
-    answers.push(`It lasts until sunset at ${moment(bDateInfo.endingSunset).format('HH:mm')}.`);
+  if (nowTz.isSame(bDateInfo.startingSunset, 'minute')) {
+    answers.push(`It just started with sunset at ${bDateInfo.startingSunset.format('HH:mm')}!`);
+  } else if (bDate.eve) {
+    answers.push(`It started with sunset at ${bDateInfo.startingSunset.format('HH:mm')}!`);
   } else {
-    var startingSunset = bDateInfo.startingSunset;
-    var nowWhen = moment(now).format('HHmm');
-    var sunsetWhen = moment(startingSunset).format('HHmm');
-    if (nowWhen = sunsetWhen) {
-      answers.push(`It just started with sunset at ${moment(startingSunset).format('HH:mm')}!`);
-    } else {
-      answers.push(`It started with sunset at ${moment(startingSunset).format('HH:mm')}.`);
-    } 
+    answers.push(`It lasts until sunset at ${bDateInfo.endingSunset.format('HH:mm')}.`);
   }
-//  var nowWhen = moment(now).format('HHmm');
-//  var sunsetWhen = moment(sun.sunset).format('HHmm');
-//  if (nowWhen = sunsetWhen) {
-//    answers.push(`It just started with sunset at ${moment(sun.sunset).format('HH:mm')}!`);
-//  } else if (nowWhen >= sunsetWhen) {
-//    answers.push(`It started with sunset at ${moment(sun.sunset).format('HH:mm')}.`);
+//
+//  if (bDateInfo.endingSunset) {
+//    var endingSunset = bDateInfo.endingSunset;
+//    var nowWhen = moment(nowTz).format('HHmm');
+//    console.log(nowWhen);
+//    var sunsetWhen = moment(endingSunset).format('HHmm');
+//    console.log(sunsetWhen);
+//    if (nowWhen == sunsetWhen) {
+//      answers.push(`It just started with sunset at ${moment(endingSunset).format('HH:mm')}!`);
+//    } else {
+//      answers.push(`It lasts until sunset at ${moment(endingSunset).format('HH:mm')}.`);
+//    }
 //  } else {
-//    // move to tomorrow
-//    noon.setHours(noon.getHours() + 24, 0, 0, 0);
-//    sun = sunCalc.getTimes(noon, coord.lat, coord.lng);
-//    addHours(sun.sunset, offset);
-//    answers.push(`It lasts until sunset at ${moment(sun.sunset).format('HH:mm')}.`);
+//    answers.push(`It started with sunset at ${moment(bDateInfo.startingSunset).format('HH:mm')}.`);
 //  }
-
 }
 
-//function getDate(opts, cb) {
-//  try {
-//    var bDate = getBDate(opts.gDate);
-
-//    var fromDate = copyAndAddDays(opts.gDate, -1);
-
-//    cb(null, {
-//      raw: bDate,
-//      text: `${monthMeaning[bDate.m]} / ${monthAr[bDate.m]} ${bDate.d} goes from sunset on ${gMonthLong[fromDate.getMonth()]} ${fromDate.getDate()} to sunset on ${gMonthLong[opts.gDate.getMonth()]} ${opts.gDate.getDate()}.`
-//    });
-//  } catch (err) {
-//    cb(err.message);
+//function getUserNowTime(serverDiff) {
+//  var now = new Date();
+//  if (serverDiff) {
+//    now.setHours(now.getHours() + serverDiff);
 //  }
+//  return now;
 //}
 
 
-function getUserNowTime(serverDiff) {
-  var now = new Date();
-  if (serverDiff) {
-    now.setHours(now.getHours() + serverDiff);
-  }
-  return now;
-}
+var getBDateInfo = function (nowTz, coord, zoneName) {
 
+  var noon = moment(nowTz).hour(12).minute(0).second(0);
 
-var getBDateInfo = function (gSourceDate, coord, offset) {
-  var now = new Date(gSourceDate.getTime());
-  var pmSunset = new Date(now.getTime());
-  pmSunset.setHours(12);
+  var sun1 = sunCalc.getTimes(noon, coord.lat, coord.lng);
 
-  var sunTimes = sunCalc.getTimes(pmSunset, coord.lat, coord.lng);
-  pmSunset = sunTimes.sunset;
+  var sunset1 = moment.tz(sun1.sunset, zoneName)
+  var afterSunset = nowTz.isAfter(sunset1);
 
-  var afterSunset = false;
-  if (now.getTime() >= pmSunset.getTime()) {
-    afterSunset = true;
-  }
-
-  addHours(pmSunset, offset);
-
-  // strip off the time
-  now.setHours(12, 0, 0, 0, 0);
   if (afterSunset) {
-    // after sunset? do for following day
-    now.setDate(now.getDate() + 1);
+    noon.add(24, 'hours');
   }
-  var gYear = now.getFullYear();
+
+  var gYear = noon.toDate().getFullYear();
   var gDayOfNawRuz = getNawRuz(gYear, true);
   var gDayLoftiness1 = copyAndAddDays(gDayOfNawRuz, -19);
 
-  var bYear = gYear - (now >= gDayOfNawRuz ? 1843 : 1844);
+  var bYear = gYear - (nowTz >= gDayOfNawRuz ? 1843 : 1844);
   var bMonth, bDay;
 
-  var isBeforeLoftiness = now < gDayLoftiness1;
+  var isBeforeLoftiness = nowTz < gDayLoftiness1;
   if (isBeforeLoftiness) {
     // back: Jan --> end of AyyamiHa
     var gDayLoftiness1LastYear = copyAndAddDays(getNawRuz(gYear - 1, true), -19);
 
-    var daysAfterLoftiness1LastYear = Math.round((now - gDayLoftiness1LastYear) / 864e5);
+    var daysAfterLoftiness1LastYear = Math.round((nowTz - gDayLoftiness1LastYear) / 864e5);
     var numMonthsFromLoftinessLastYear = Math.floor(daysAfterLoftiness1LastYear / 19);
 
     bDay = 1 + daysAfterLoftiness1LastYear - numMonthsFromLoftinessLastYear * 19;
@@ -169,7 +167,7 @@ var getBDateInfo = function (gSourceDate, coord, offset) {
     }
   } else {
     // forward: Loftiness --> Dec
-    var bDaysAfterLoftiness1 = Math.round((now - gDayLoftiness1) / 864e5);
+    var bDaysAfterLoftiness1 = Math.round((nowTz - gDayLoftiness1) / 864e5);
     var bNumMonthsFromLoftiness = Math.floor(bDaysAfterLoftiness1 / 19);
 
     bDay = 1 + bDaysAfterLoftiness1 - bNumMonthsFromLoftiness * 19;
@@ -180,10 +178,14 @@ var getBDateInfo = function (gSourceDate, coord, offset) {
     }
   }
 
+  var sun0 = !afterSunset ? sunCalc.getTimes(moment(noon).subtract(24, 'hours'), coord.lat, coord.lng) : null;
+  var sun2 = afterSunset ? sunCalc.getTimes(moment(noon).add(24, 'hours'), coord.lat, coord.lng) : null;
+
   return {
     bDate: { y: bYear, m: bMonth, d: bDay, eve: afterSunset },
-    startingSunset: afterSunset ? pmSunset : null,
-    endingSunset: afterSunset ? null : pmSunset
+    startingSunset: afterSunset ? sunset1 : moment.tz(sun0.sunset, zoneName),
+    sunrise: afterSunset ? moment.tz(sun2.sunset, zoneName) : moment.tz(sun1.sunset, zoneName),
+    endingSunset: afterSunset ? moment.tz(sun2.sunset, zoneName) : sunset1
   };
 };
 
@@ -1918,8 +1920,8 @@ var gMonthLong = "January,February,March,April,May,June,July,August,September,Oc
 
 
 module.exports = {
-  sunTimes: sunTimes,
-  addTodayInfoToAnswers: addTodayInfoToAnswers,
-  getSunTimes: getSunTimes
+  addSunTimes: addSunTimes,
+  addTodayInfoToAnswers: addTodayInfoToAnswers
+//  getSunTimes: getSunTimes
 };
 
