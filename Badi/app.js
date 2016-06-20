@@ -239,7 +239,7 @@ function respond(reply, profile, log, payloadMessage, key) {
       var details = {
         diff: hourDifference,
         zoneName: profile.tzInfo.zoneName
-    };
+      };
       var matches = question.match(/\d{1,2}(:\d{2,2})?/);
       if (matches) {
         hours = matches[0];
@@ -260,10 +260,7 @@ function respond(reply, profile, log, payloadMessage, key) {
           when = matches[0];
           details.coord = profile.coord;
 
-//          var sunTimes = badiCalc.getSunTimes(profile);
-
-          answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${when} about the current Badí' date.`);
-//          answers.push(`\nToday's ${when}: ${moment(sunTimes[when]).format('HH:mm')}`);
+          answers.push(`Great! I'll try to let you know at ${when} each day about the current Badí' date.`);
 
           setTimeout(function () {
             processSuntimes(profile.id);
@@ -394,11 +391,13 @@ function prepareReminderTimer() {
 function processSuntimes(id) {
   console.log('process suntimes ' + id);
 
-  var now = moment.tz().add(1, 'minutes').toDate(); // needs to be at least one minute in the future!
+  var now = moment().add(1, 'minutes').toDate(); // needs to be at least one minute in the future!
   var noon = moment().hours(12);
   var noonTomorrow = moment(noon).add(1, 'days');
 
   var reminders = storage.getItem('reminders');
+
+  console.log(reminders);
 
   var numAdded = 0;
 
@@ -420,12 +419,19 @@ function addReminders(which, reminders, now, noon, noonTomorrow, idToProcess) {
     if (remindersAtWhichEvent.hasOwnProperty(id)) {
       if (!idToProcess || idToProcess === id) {
         var profileStub = remindersAtWhichEvent[id];
+        console.log(profileStub);
+        //TODO update to use moment.tz!
 
         var lastSetFor = profileStub.lastSetFor;
+        console.log(lastSetFor);
         if (lastSetFor) {
           // remove old version
           var reminderGroup = reminders[lastSetFor];
-          delete reminderGroup[id];
+          console.log(reminderGroup[id]);
+          if (reminderGroup[id] && reminderGroup[id].customFor === which) {
+            delete reminderGroup[id];
+            console.log(`removed previous ${which} reminder.`)
+          }
         }
 
         var coord = profileStub.coord;
@@ -449,7 +455,9 @@ function addReminders(which, reminders, now, noon, noonTomorrow, idToProcess) {
         console.log('added for ' + whenHHMM)
 
         profileStub.lastSetFor = whenHHMM;
-        profileStub.lastSetAt = momentWhen.format(); // just for interest sake
+        profileStub.lastSetAt = moment().format(); // just for interest sake
+
+        console.log(profileStub);
 
         var reminderGroup = reminders[whenHHMM] || {};
         reminderGroup[id] = details;
