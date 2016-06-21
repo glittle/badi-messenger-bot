@@ -21,6 +21,12 @@ storage.initSync({
 
 var secrets = storage.getItem('secrets');
 const timezonedb = require('timezonedb-node')(secrets.timeZoneKey);
+var verses = null;
+fs.readFile('verses.json', 'utf8', (err, data) => {
+  if (err) throw err;
+  verses = JSON.parse(data);
+});
+
 
 let bot = new Bot({
   token: secrets.botKey,
@@ -295,6 +301,14 @@ function respond(reply, profile, log, payloadMessage, key) {
   if (question.search(/TODAY/i) !== -1 || question.search(/^NOW$/i) !== -1) {
     if (profile.tzInfo) {
       badiCalc.addTodayInfoToAnswers(profile, answers);
+      addVerse(profile, answers);
+    }
+  }
+
+  // -------------------------------------------------------
+  if (question.search(/VERSE/i) !== -1) {
+    if (profile.tzInfo) {
+      addVerse(profile, answers);
     }
   }
 
@@ -305,6 +319,7 @@ function respond(reply, profile, log, payloadMessage, key) {
     answers.push('');
     answers.push('⇒ "today"\nI\'ll tell you what Badí\' day it is where I am.');
     answers.push('⇒ "hello"\nI\'ll reply with your name.');
+    answers.push('⇒ "verse"\nI\'ll share the current passage from "Reciting the Verses of God"!');
     answers.push('');
     answers.push('After you send me your Location using the Facebook Messenger mobile app, I can send you reminders:');
     answers.push('');
@@ -313,7 +328,6 @@ function respond(reply, profile, log, payloadMessage, key) {
     answers.push('⇒ "remind when"?\nI\'ll show you when I plan to remind you.')
     answers.push('⇒ "clear reminders"\nI\'ll stop sending you reminders.')
     answers.push('⇒ "sun times"\nI\'ll send you today\'s sunrise and sunset times.')
-    answers.push('');
   }
 
   // -------------------------------------------------------
@@ -397,7 +411,7 @@ function processSuntimes(id) {
 
   var reminders = storage.getItem('reminders');
 
-  console.log(reminders);
+  //  console.log(reminders);
 
   var numAdded = 0;
 
@@ -548,6 +562,7 @@ function sendReminder(serverWhen, id, info) {
   var profile = loadProfile(id);
 
   badiCalc.addTodayInfoToAnswers(profile, answers);
+  addVerse(profile, answers);
 
   var answerText = answers.join('\n');
 
@@ -589,7 +604,36 @@ function addHours(d, hours) {
   d.setHours(d.getHours() + hours);
 }
 
+function addVerse(profile, answers) {
+  if (!verses) {
+    return;
+  }
+  var hour;
+  var timeOfDay;
+  var key;
 
+  if (profile.tzInfo) {
+    var zoneName = profile.tzInfo.zoneName;
+    var nowTz = moment.tz(zoneName);
+    key = nowTz.format('M.D');
+    hour = nowTz.hour();
+    timeOfDay = 'for this ' + (hour < 12 ? 'morning' : (hour < 18 ? 'afternoon/evening' : 'evening'));
+  } else {
+    // don't know user's time
+    var now = moment();
+    hour = now.hour(); // server time
+    key = now.format('M.D');
+    timeOfDay = 'for today';
+  }
+  var isAm = hour < 12;
+  var dayVerses = verses[key];
+  if (dayVerses) {
+    var verseInfo = dayVerses[isAm ? 'am' : 'pm'];
+    if (verseInfo) {
+      answers.push(`A verse of Bahá'u'lláh ${timeOfDay}:\n\n${verseInfo.q} (${verseInfo.r})`)
+    }
+  }
+}
 
 bot.on('error', (err) => {
   console.log(err.message)
