@@ -11,6 +11,7 @@ const fs = require('fs');
 var testEvery5seconds = false;
 var manuallyStopped = false;
 var timeout = null;
+const maxAnswerLength = 319;
 
 var storageFolder = 'BadiBotStorage';
 var storagePath = '../../../../' + storageFolder;
@@ -346,12 +347,14 @@ function sendAllAnswers(reply, question, answers, log, profile, key, originalAns
   }
 
   var keepGoing = true;
+
   if (answers.length) {
+    // assume no single text is too long
     var answerText = answers.shift();
 
     for (var i = 0; keepGoing; i++) {
       if (!answers.length // past the end
-          || (answerText && (answerText + answers[0]).length > 319)
+          || (answerText && (answerText + answers[0]).length > maxAnswerLength)
           || answers[0] === '') {
 
         bot.sendMessage(profile.id, { text: answerText }, (err) => {
@@ -630,7 +633,42 @@ function addVerse(profile, answers) {
   if (dayVerses) {
     var verseInfo = dayVerses[isAm ? 'am' : 'pm'];
     if (verseInfo) {
-      answers.push(`A verse of Bahá'u'lláh ${timeOfDay}:\n\n${verseInfo.q} (${verseInfo.r})`)
+      answers.push(`A verse of Bahá'u'lláh ${timeOfDay}...`);
+
+      var suffix = ` (${verseInfo.r})`;
+      var verse = verseInfo.q;
+      var answer = verse + suffix;
+
+      if (answer.length > maxAnswerLength) {
+        // can't be more than two maxAnswerLength
+        var p_v = verse;
+        if (p_v.length > maxAnswerLength) {
+          // find 2nd last space...
+          var space = p_v.lastIndexOf(' ', p_v.lastIndexOf(' ', maxAnswerLength - 4) - 1);
+          console.log(space);
+          var part1 = p_v.substring(0, space) + ' ...';
+          var part2 = p_v.substring(space + 1);
+          answers.push(part1);
+          answers.push(part2 + suffix);
+        } else {
+          answers.push(p_v);
+          answers.push(suffix);
+        }
+
+      } else {
+        answers.push(answer);
+      }
+
+      console.log(answers);
+//      var re = new RegExp('[\s\S]{1,' + maxAnswerLength + '}', 'g');
+//      for (var j = 0; j < answers.length; j++) {
+//        var a = answers[j];
+//        if (a.length > maxAnswerLength) {
+//          // need to split into smaller parts
+//          var parts = a.match(re)
+//        }
+//      }
+
     }
   }
 }
