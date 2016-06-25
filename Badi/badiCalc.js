@@ -99,6 +99,9 @@ function addTodayInfoToAnswers(profile, answers) {
 
   answers.push(greeting + ` Today is ${monthMeaning[bDate.m]} ${bDate.d} (${monthMeaning[bDate.d]}) in the Wondrous calendar! (aka ${monthAr[bDate.m]} ${bDate.d})`);
 
+  console.log('local now: ' + nowTz.format())
+  console.log('start of day: ' + bDateInfo.startingSunset.format());
+
   if (nowTz.isSame(bDateInfo.startingSunset, 'minute')) {
     answers.push(`It just started with sunset at ${bDateInfo.startingSunset.format('HH:mm')}!`);
   } else if (bDate.eve) {
@@ -148,24 +151,25 @@ var getBDateInfo = function (nowTz, coord, zoneName) {
   var afterSunset = nowTz.isAfter(sunsetTz);
 
   if (afterSunset) {
+    console.log('after sunset');
     noonTz.add(24, 'hours');
   }
-  console.log('noon of day ' + noonTz.format());
+  console.log('noon of target day ' + noonTz.format());
 
 
-  var gYear = noonTz.toDate().getFullYear();
+  var gYear = noonTz.year();
   var gDayOfNawRuz = getNawRuz(gYear, true);
   var gDayLoftiness1 = copyAndAddDays(gDayOfNawRuz, -19);
 
-  var bYear = gYear - (nowTz >= gDayOfNawRuz ? 1843 : 1844);
+  var bYear = gYear - (noonTz >= gDayOfNawRuz ? 1843 : 1844);
   var bMonth, bDay;
 
-  var isBeforeLoftiness = nowTz < gDayLoftiness1;
+  var isBeforeLoftiness = noonTz < gDayLoftiness1;
   if (isBeforeLoftiness) {
     // back: Jan --> end of AyyamiHa
     var gDayLoftiness1LastYear = copyAndAddDays(getNawRuz(gYear - 1, true), -19);
 
-    var daysAfterLoftiness1LastYear = Math.round((nowTz - gDayLoftiness1LastYear) / 864e5);
+    var daysAfterLoftiness1LastYear = Math.round((noonTz - gDayLoftiness1LastYear) / 864e5);
     var numMonthsFromLoftinessLastYear = Math.floor(daysAfterLoftiness1LastYear / 19);
 
     bDay = 1 + daysAfterLoftiness1LastYear - numMonthsFromLoftinessLastYear * 19;
@@ -176,7 +180,7 @@ var getBDateInfo = function (nowTz, coord, zoneName) {
     }
   } else {
     // forward: Loftiness --> Dec
-    var bDaysAfterLoftiness1 = Math.round((nowTz - gDayLoftiness1) / 864e5);
+    var bDaysAfterLoftiness1 = Math.round((noonTz - gDayLoftiness1) / 864e5);
     var bNumMonthsFromLoftiness = Math.floor(bDaysAfterLoftiness1 / 19);
 
     bDay = 1 + bDaysAfterLoftiness1 - bNumMonthsFromLoftiness * 19;
