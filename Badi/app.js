@@ -1,24 +1,24 @@
 ﻿'use strict'
 const http = require('http')
+const fs = require('fs');
+const glob = require('glob');
 const Bot = require('messenger-bot');
 const storage = require('node-persist');
+const moment = require('moment-timezone');
+const extend = require('node.extend');
 const badiCalc = require('./badiCalc');
 const sunCalc = require('./sunCalc');
-const moment = require('moment-timezone');
-const glob = require('glob');
-const fs = require('fs');
-const extend = require('node.extend');
 
-var testEvery5seconds = false;
-var manuallyStopped = false;
-var timeout = null;
-const maxAnswerLength = 319;
-
-var sorryMsg = 'Oops... I had a problem just now. Sorry I wasn\'t able to reply. ' +
+//const forceNewMessageChar = '$%';
+const maxAnswerLength = 319; 
+const sorryMsg = 'Oops... I had a problem just now. Sorry I wasn\'t able to reply properly. ' +
   'My programmer will have to fix something!';
 
-var storageFolder = 'BadiBotStorage';
-var storagePath = '../../../../' + storageFolder;
+const storageFolder = 'BadiBotStorage';
+const storagePath = '../../../../' + storageFolder;
+
+var manuallyStopped = false; // remote kill switch!
+var reminderInterval = null;
 
 storage.initSync({
   dir: storagePath
@@ -56,6 +56,7 @@ bot.on('message', (payload, reply) => {
     bot.getProfile(payload.sender.id, (err, profile) => {
       if (err) throw err
       profile.id = senderId;
+      profile.firstVisit = moment().format();
       try {
         respond(profile, payload.message, key);
       } catch (e) {
@@ -65,7 +66,6 @@ bot.on('message', (payload, reply) => {
     });
   }
 });
-
 
 function respond(profile, payloadMessage, keys) {
   var senderId = profile.id;
@@ -154,57 +154,108 @@ function answerQuestions(question, profile, keys, answers) {
   }
 
   // -------------------------------------------------------
-  if (asking(question, ['hello', 'hi'])) {
+  if (isAsking(question, ['hello', 'hi'])) {
     answers.push(`Hello ${profile.first_name}!`);
 
-    if (!profile.tzInfo) {
-      answers.push(`Please send me your Location using the Facebook Messenger mobile app, so that I can give you the correct date information!`);
-      answers.push(`You can read full instructions here: http://bit.ly/BadiCalendarBot`);
-    }
+    notifyDeveloper('New user: ' + profile.first_name);
+
     if (profile.visitCount) {
-      answers.push(`We have chatted ${profile.visitCount} times.`);
+      answers.push(`We have chatted ${profile.visitCount} times!`);
+    } else {
+      answers.push(`I'm pleased to meet you!\n`);
+    }
+
+    if (!profile.tzInfo) {
+      answers.push(`Please send me your Location using the Facebook Messenger mobile app, so that I know where you are!`);
+      answers.push(`You can read full instructions here: http://bit.ly/BadiCalendarBot`);
     }
   }
 
   // -------------------------------------------------------
-  // if "DEV" commands expose secret information, can add a manual whitelist of developers
-  if (asking(question, 'DEV STOP')) {
+  if (isAsking(question, 'DEV STOP')) {
     // kill-switch
     answers.push('Stopped reminders');
-    clearInterval(timeout);
+    clearInterval(reminderInterval);
     manuallyStopped = true;
   }
   // -------------------------------------------------------
-  if (asking(question, 'DEV START')) {
+  if (isAsking(question, 'DEV START')) {
     answers.push('Started reminders');
     manuallyStopped = false;
     prepareReminderTimer();
   }
+
   // -------------------------------------------------------
-  if (asking(question, 'DEV VISITORS')) {
-    answers.push(`Visitors list:`);
+  if (isAsking(question, ['DEV VISITORS', 'DEV VISITORS NEW', 'DEV NEW']) && isDeveloperId(senderId)) {
+    answers.push(`Checking the visitors list...`);
     glob(`../${storageFolder}/*_profile`, {
 
     }, function (er, files) {
       if (er) {
         console.log(er);
       } else {
+        var askingForNew = question.toUpperCase().indexOf('NEW') !== -1;
+        var numNew = 0;
+        const diffDays = 7;
+        var numWithLocation = 0;
+        var profiles = [];
         for (var i = 0; i < files.length; i++) {
-          var p = JSON.parse(fs.readFileSync(files[i], 'utf8'));
-          var info = ['\n' + p.first_name, p.visitCount, `\n` + p.id.substring(0,6)];
-          if (p.tzInfo) {
-            info.push(p.tzInfo.countryCode);
-          } else {
-            info.push('no location');
+          var profile = JSON.parse(fs.readFileSync(files[i], 'utf8'));
+          profile.isNew = profile.firstVisit
+            && moment().diff(moment(profile.firstVisit), 'days') < diffDays;
+          if (profile.isNew) {
+            numNew++;
           }
-          answers.push(info.join('; '));
+          numWithLocation += profile.tzInfo ? 1 : 0;
+          profiles.push(profile);
         }
-        answers.push(`${files.length} visitors.`);
+        profiles.sort(function (a, b) {
+          // sort those with locations first
+          if (!!a.tzInfo === !!b.tzInfo) {
+            return a.first_name > b.first_name ? 1 : -1;
+          }
+          if (a.tzInfo) {
+            return -1;
+          }
+          return 1;
+        });
+        if (!askingForNew) {
+          answers.push(`I've had ${files.length} visitors.`);
+          answers.push(`${numNew} new* in the last ${diffDays} days.`);
+        } else {
+          answers.push(`${numNew} new in the last ${diffDays} days.`);
+        }
+        answers.push(`These ${numWithLocation} have a location:`);
+        var showingWithLocations = true; // in practice, first will always have a location
+        for (var i = 0; i < profiles.length; i++) {
+          var p = profiles[i];
+
+          if (askingForNew && !p.isNew) {
+            continue;
+          }
+          var hasLocation = !!p.tzInfo;
+
+          if (showingWithLocations && !hasLocation) {
+            answers.push(`\nThese ${profiles.length - i} have no location:`);
+            //            answers.push(forceNewMessageChar + 'Those with no location...');
+            showingWithLocations = false;
+          }
+
+          var info = [(p.first_name || '').substring(0, 8) + (!askingForNew && p.isNew ? '*' : '')];
+          if (hasLocation) {
+            info.push(p.tzInfo.countryCode);
+            //          } else {
+            //            info.push('no location');
+          }
+          info.push('x' + p.visitCount);
+          info.push(p.id.substring(0, 5));
+          answers.push(info.join(', '));
+        }
       }
     })
   }
   // -------------------------------------------------------
-  if (asking(question, 'DEV REMINDERS')) {
+  if (isAsking(question, 'DEV REMINDERS')) {
     answers.push('Reminders set for:');
     var reminders = storage.getItem('reminders') || {};
 
@@ -222,7 +273,7 @@ function answerQuestions(question, profile, keys, answers) {
   }
 
   // -------------------------------------------------------
-  if (asking(question, 'CLEAR REMINDERS')) {
+  if (isAsking(question, 'CLEAR REMINDERS')) {
 
     var numCleared = processReminders(senderId, answers, true);
     if (numCleared) {
@@ -233,7 +284,7 @@ function answerQuestions(question, profile, keys, answers) {
   }
 
   // -------------------------------------------------------
-  if (asking(question, ['REMIND WHEN','Remind after location update'])) {
+  if (isAsking(question, ['REMIND WHEN', 'Remind after location update'])) {
     var numCleared = processReminders(senderId, answers, false);
     if (numCleared === 1) {
       answers.push(`That's the only reminder I have for you, ${profile.first_name}.`);
@@ -250,7 +301,7 @@ function answerQuestions(question, profile, keys, answers) {
   }
 
   // -------------------------------------------------------
-  if (asking(question, ['remind at', 'remind me at'])) {
+  if (isAsking(question, ['remind at', 'remind me at'])) {
 
     if (profile.tzInfo) {
 
@@ -310,12 +361,12 @@ function answerQuestions(question, profile, keys, answers) {
   }
 
   // -------------------------------------------------------
-  if (asking(question, ['SUN TIMES'])) {
+  if (isAsking(question, ['SUN TIMES'])) {
     badiCalc.addSunTimes(profile, answers);
   }
 
   // -------------------------------------------------------
-  if (asking(question, ['TODAY', 'NOW'])) {
+  if (isAsking(question, ['TODAY', 'NOW'])) {
     if (profile.tzInfo) {
       badiCalc.addTodayInfoToAnswers(profile, answers);
       addVerse(profile, answers);
@@ -323,14 +374,14 @@ function answerQuestions(question, profile, keys, answers) {
   }
 
   // -------------------------------------------------------
-  if (asking(question, 'VERSE')) {
+  if (isAsking(question, 'VERSE')) {
     if (profile.tzInfo) {
       addVerse(profile, answers);
     }
   }
 
   // -------------------------------------------------------
-  if (asking(question, 'HELP')) {
+  if (isAsking(question, 'HELP')) {
 
     answers.push('Here are the phrases that you can use when talking with me.');
     answers.push('\n"today"\nI\'ll tell you what Badí\' day it is where I am.');
@@ -344,14 +395,13 @@ function answerQuestions(question, profile, keys, answers) {
 
   // -------------------------------------------------------
   if (!answers.length) {
-    answers.push('Say "help" to learn what the bot can understand! Read more here: http://bit.ly/BadiCalendarBot');
+    answers.push('Say "help" to learn what the bot can do. See http://bit.ly/BadiCalendarBot for complete details!');
   }
 
   return answers;
 }
 
-
-function sendAllAnswers(question, answers, profile, key, originalAnswers) {
+function sendAllAnswers(question, answers, profile, keys, originalAnswers) {
   if (!originalAnswers) {
     originalAnswers = JSON.parse(JSON.stringify(answers));
   }
@@ -363,9 +413,16 @@ function sendAllAnswers(question, answers, profile, key, originalAnswers) {
     var answerText = answers.shift();
 
     for (var i = 0; keepGoing; i++) {
+      //      var wantNewMessage = answerText.indexOf(forceNewMessageChar) === 0;
+
       if (!answers.length // past the end
           || (answerText && (answerText + answers[0]).length > maxAnswerLength)
+        //          || wantNewMessage
           || answers[0] === '') {
+
+        //        if (wantNewMessage) {
+        //          answerText = answerText.replace(forceNewMessageChar, '');
+        //        }
 
         bot.sendMessage(profile.id, { text: answerText }, (err) => {
           if (err) {
@@ -374,7 +431,7 @@ function sendAllAnswers(question, answers, profile, key, originalAnswers) {
           } else {
             console.log(`Sent: ${answerText}`)
             setTimeout(function () {
-              sendAllAnswers(question, answers, profile, key, originalAnswers);
+              sendAllAnswers(question, answers, profile, keys, originalAnswers);
             }, 500);
           }
         });
@@ -387,7 +444,7 @@ function sendAllAnswers(question, answers, profile, key, originalAnswers) {
   }
 
   // get it again
-  var log = storage.getItem(key.log) || [];
+  var log = storage.getItem(keys.log) || [];
   log.push({
     when: new Date(),
     question: question,
@@ -396,8 +453,8 @@ function sendAllAnswers(question, answers, profile, key, originalAnswers) {
 
   profile.visitCount = log.length;
 
-  storage.setItem(key.profile, profile);
-  storage.setItem(key.log, log);
+  storage.setItem(keys.profile, profile);
+  storage.setItem(keys.log, log);
 
   console.log('stored profile and log');
 }
@@ -408,8 +465,8 @@ function prepareReminderTimer() {
     return;
   }
 
-  clearInterval(timeout);
-  timeout = setInterval(doReminders, 1000 * 60);
+  clearInterval(reminderInterval);
+  reminderInterval = setInterval(doReminders, 1000 * 60);
 
   console.log(`Reminder interval started for every minute.`);
 
@@ -536,6 +593,7 @@ function doReminders() {
   }
 
 }
+
 function processReminders(currentId, answers, deleteReminders) {
   var num = 0;
 
@@ -581,47 +639,16 @@ function processReminders(currentId, answers, deleteReminders) {
 
 function sendReminder(serverWhen, id, info) {
   var answers = [];
-  var profile = loadProfile(id);
+  var profile = getProfile(id);
   var key = makeKeys(id);
 
   badiCalc.addTodayInfoToAnswers(profile, answers);
   addVerse(profile, answers);
 
   sendAllAnswers(`Reminder at ${serverWhen}`, answers, profile, key, null);
-  //
-  //  var answerText = answers.join('\n');
-  //
-  //  bot.sendMessage(id, {
-  //    text: answerText
-  //  }, (err) => {
-  //    if (err) {
-  //      console.log(err);
-  //      console.log('Err1: ' + answerText);
-  //    } else {
-  //      console.log(`Reminder at ${serverWhen} - ${profile.first_name} ${profile.last_name}: ${answerText}`)
-  //    }
-  //  })
-
 }
 
-//function getUserNowTime(tzInfo) {
-//  var now = new Date();
-//  if (tzInfo) {
-//    now.setHours(now.getHours() + tzInfo.serverDiff);
-//  }
-//  return now;
-//}
-
-
-//function getUserDateInfo(profile) {
-//  var userDate = getUserNowTime(profile.tzInfo);
-//  return {
-//    now: userDate,
-//    diff: profile.tzInfo ? profile.tzInfo.serverDiff : 0
-//  };
-//}
-
-function loadProfile(id) {
+function getProfile(id) {
   var key = id + '_profile';
   return storage.getItem(key);
 }
@@ -702,6 +729,7 @@ function addVerse(profile, answers) {
 function loadVersesAsync(cb) {
   fs.readFile('verses.json', 'utf8', (err, data) => {
     if (err) {
+      console.log('Verses failed to load...');
       console.log(err);
     } else {
       console.log('\nverses loaded');
@@ -713,15 +741,16 @@ function loadVersesAsync(cb) {
   });
 }
 
-function asking(question, text) {
+function isAsking(question, text) {
   if (Array.isArray(text)) {
     for (var i = 0; i < text.length; i++) {
-      if (asking(question, text[i])) {
+      if (isAsking(question, text[i])) {
         return true;
       }
     }
     return false;
   }
+  //todo: need to avoid picking up keyword in the middle of another phrase?
   return question.toUpperCase().indexOf(text.toUpperCase()) !== -1;
 }
 
@@ -730,6 +759,25 @@ function makeKeys(senderId) {
     profile: senderId + '_profile',
     log: senderId + '_log'
   };
+}
+
+function isDeveloperId(id) {
+  var isDev = secrets.devId === id;
+  if (!isDev) {
+    console.log('!!! failed dev attempt from user id ' + id);
+  }
+  return isDev;
+}
+
+function notifyDeveloper(msg) {
+  setTimeout(function(m) {
+    var devId = secrets.devId;
+
+    var devProfile = getProfile(devId);
+    var keys = makeKeys(devId);
+    //sendAllAnswers('new user', [m], devProfile, devId);
+  }, 500, msg);
+
 }
 
 bot.on('error', (err) => {
