@@ -99,8 +99,8 @@ function addTodayInfoToAnswers(profile, answers) {
 
   answers.push(greeting + ` Today is ${monthMeaning[bDate.m]} ${bDate.d} (${monthMeaning[bDate.d]}) in the Wondrous calendar! (aka ${monthAr[bDate.m]} ${bDate.d})`);
 
-  console.log('local now: ' + nowTz.format())
-  console.log('start of day: ' + bDateInfo.startingSunset.format());
+//  console.log('local now: ' + nowTz.format())
+//  console.log('start of day: ' + bDateInfo.startingSunset.format());
 
   if (nowTz.isSame(bDateInfo.startingSunset, 'minute')) {
     answers.push(`It just started with sunset at ${bDateInfo.startingSunset.format('HH:mm')}!`);
@@ -141,20 +141,20 @@ var getBDateInfo = function (nowTz, coord, zoneName) {
 
   var sun1 = sunCalc.getTimes(noonTz, coord.lat, coord.lng);
 
-  console.log('local now ' + nowTz.format());
-  console.log('local noon ' + noonTz.format());
-  console.log(sun1);
+//  console.log('local now ' + nowTz.format());
+//  console.log('local noon ' + noonTz.format());
+//  console.log(sun1);
   var sunsetTz = moment.tz(sun1.sunset, zoneName)
 
-  console.log('local sunset ' + sunsetTz.format());
+//  console.log('local sunset ' + sunsetTz.format());
 
   var afterSunset = nowTz.isAfter(sunsetTz);
 
   if (afterSunset) {
-    console.log('after sunset');
+//    console.log('after sunset');
     noonTz.add(24, 'hours');
   }
-  console.log('noon of target day ' + noonTz.format());
+//  console.log('noon of target day ' + noonTz.format());
 
 
   var gYear = noonTz.year();

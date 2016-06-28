@@ -10,7 +10,7 @@ const badiCalc = require('./badiCalc');
 const sunCalc = require('./sunCalc');
 
 //const forceNewMessageChar = '$%';
-const maxAnswerLength = 319; 
+const maxAnswerLength = 319;
 const sorryMsg = 'Oops... I had a problem just now. Sorry I wasn\'t able to reply properly. ' +
   'My programmer will have to fix something!';
 
@@ -222,10 +222,10 @@ function answerQuestions(question, profile, keys, answers) {
         if (!askingForNew) {
           answers.push(`I've had ${files.length} visitors.`);
           answers.push(`${numNew} new* in the last ${diffDays} days.`);
+          answers.push(`These ${numWithLocation} have a location:`);
         } else {
           answers.push(`${numNew} new in the last ${diffDays} days.`);
         }
-        answers.push(`These ${numWithLocation} have a location:`);
         var showingWithLocations = true; // in practice, first will always have a location
         for (var i = 0; i < profiles.length; i++) {
           var p = profiles[i];
@@ -261,12 +261,13 @@ function answerQuestions(question, profile, keys, answers) {
 
     for (var when in reminders) {
       if (reminders.hasOwnProperty(when)) {
+        answers.push('---' + when + '---');
         var reminderGroup = reminders[when];
         for (var id in reminderGroup) {
+//          console.log(id);
           var info = reminderGroup[id];
-          var profile = info.profile;
-          var tzInfo = profile.tzInfo;
-          answers.push(`${when} - ${profile.first_name} - ${info.userHour} in ${tzInfo.countryCode} - ${tzInfo.zoneName}.`);
+//          console.log(info);
+          answers.push(`${id.substring(0, 5)} ${info.userTime || ''} ${info.customFor || ''} (${info.diff}).`);
         }
       }
     }
@@ -355,8 +356,9 @@ function answerQuestions(question, profile, keys, answers) {
 
       }
     } else {
-      answers.push('Sorry, I can\'t remind you until I know your location.');
-      answers.push('Please use the Facebook Messenger app to send me your location!');
+      answers.push(`Sorry ${profile.first_name}, I can\'t remind you until I know your location.`);
+      answers.push('Please use the Facebook Messenger app to send it to me.' +
+        ' If you are not sure how to do that, see http://bit.ly/BadiCalendarBot.');
     }
   }
 
@@ -614,6 +616,7 @@ function processReminders(currentId, answers, deleteReminders) {
             //TODO find reminder at actual time!
 
             delete remindersAtWhen[id];
+            saveNeeded = true;
             answers.push(`Removed reminder at ${info.userTime || when}.`);
           } else {
             if (info.customFor) {
@@ -631,7 +634,7 @@ function processReminders(currentId, answers, deleteReminders) {
       }
     }
   }
-  if (saveNeeded || (num > 0 && deleteReminders)) {
+  if (saveNeeded) {
     storage.setItem('reminders', reminders);
   }
   return num;
@@ -770,7 +773,7 @@ function isDeveloperId(id) {
 }
 
 function notifyDeveloper(msg) {
-  setTimeout(function(m) {
+  setTimeout(function (m) {
     var devId = secrets.devId;
 
     var devProfile = getProfile(devId);
