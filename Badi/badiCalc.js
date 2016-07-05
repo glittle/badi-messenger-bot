@@ -102,7 +102,9 @@ function addTodayInfoToAnswers(profile, answers) {
 //  console.log('local now: ' + nowTz.format())
 //  console.log('start of day: ' + bDateInfo.startingSunset.format());
 
-  if (nowTz.isSame(bDateInfo.startingSunset, 'minute')) {
+  var age = nowTz.diff(bDateInfo.startingSunset, 'minute');
+  console.log(age);
+  if (age >= 0 && age < 5) {
     answers.push(`It just started with sunset at ${bDateInfo.startingSunset.format('HH:mm')}!`);
   } else if (bDate.eve) {
     answers.push(`It started with sunset at ${bDateInfo.startingSunset.format('HH:mm')}!`);

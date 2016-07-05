@@ -80,6 +80,7 @@ function respond(profile, payloadMessage, keys) {
   }
 
   if (payloadMessage.attachments) {
+    console.log(`\nIncoming (${profile.first_name} ${profile.last_name} #${profile.visitCount || 'new'})...`);
     for (var i = 0; i < payloadMessage.attachments.length; i++) {
       var attach = payloadMessage.attachments[i];
       switch (attach.type) {
@@ -107,7 +108,7 @@ function respond(profile, payloadMessage, keys) {
                 profile.coord = coord;
                 storage.setItem(keys.profile, profile);
 
-                var answerText = 'Great! Thanks for your location!';
+                var answerText = greatSometimes('! ') + 'Thanks for your location!';
 
                 bot.sendMessage(senderId,
                 {
@@ -118,6 +119,8 @@ function respond(profile, payloadMessage, keys) {
                     console.log(err);
                   }
                 });
+
+                notifyDeveloper(`New user: ${profile.first_name} in zone ${tzInfo.zoneName}`);
 
                 console.log(`Received location and timezone info for ${profile.first_name}.`);
                 setTimeout(function () {
@@ -133,13 +136,78 @@ function respond(profile, payloadMessage, keys) {
               }
             });
           break;
+
+        case 'image':
+          console.log(JSON.stringify(payloadMessage.attachments));
+          var answer = thanksSometimes() + ':)';
+          bot.sendMessage(senderId,
+                {
+                  text: answer // smiley
+                },
+               (err) => {
+                 if (err) {
+                   console.log(err);
+                 }
+               });
+          break;
+
         default:
           console.log(JSON.stringify(payloadMessage.attachments));
-          answers.push('Thanks, but I don\'t know what to do with that!');
+          bot.sendMessage(senderId,
+               {
+                 text: 'Thanks, but I don\'t know what to do with that!'
+               },
+               (err) => {
+                 if (err) {
+                   console.log(err);
+                 }
+               });
           break;
       }
     }
   }
+}
+
+function thanksSometimes() {
+  var num = Math.random();
+  if (num < 0.5) {
+    return 'Thanks! ';
+  }
+  if (num < 0.75) {
+    return 'Thank you. ';
+  }
+  if (num < 0.9) {
+    return 'Wow! ';
+  }
+  return ''; //nothing
+}
+
+function greatSometimes(suffix) {
+  var num = Math.random();
+  if (num < 0.5) {
+    return 'Great' + suffix;
+  }
+  if (num < 0.75) {
+    return 'Sounds good' + suffix;
+  }
+  if (num < 0.9) {
+    return 'Wonderful' + suffix;
+  }
+  return 'Okay' + suffix;
+}
+
+function helloSometimes(suffix) {
+  var num = Math.random();
+  if (num < 0.6) {
+    return 'Hello' + suffix;
+  }
+  if (num < 0.75) {
+    return 'Hi' + suffix;
+  }
+  if (num < 0.9) {
+    return 'Good day' + suffix;
+  }
+  return 'Hello' + suffix;
 }
 
 function answerQuestions(question, profile, keys, answers) {
@@ -155,11 +223,9 @@ function answerQuestions(question, profile, keys, answers) {
 
   // -------------------------------------------------------
   if (isAsking(question, ['hello', 'hi'])) {
-    answers.push(`Hello ${profile.first_name}!`);
+    answers.push(helloSometimes(', ') + `${profile.first_name}!`);
 
-    notifyDeveloper('New user: ' + profile.first_name);
-
-    if (profile.visitCount) {
+    if (profile.visitCount > 2) {
       answers.push(`We have chatted ${profile.visitCount} times!`);
     } else {
       answers.push(`I'm pleased to meet you!\n`);
@@ -186,7 +252,7 @@ function answerQuestions(question, profile, keys, answers) {
   }
 
   // -------------------------------------------------------
-  if (isAsking(question, ['DEV VISITORS', 'DEV VISITORS NEW', 'DEV NEW']) && isDeveloperId(senderId)) {
+  if (isDeveloperId(senderId) && isAsking(question, ['DEV VISITORS', 'DEV VISITORS NEW', 'DEV NEW'])) {
     answers.push(`Checking the visitors list...`);
     glob(`../${storageFolder}/*_profile`, {
 
@@ -264,12 +330,34 @@ function answerQuestions(question, profile, keys, answers) {
         answers.push('---' + when + '---');
         var reminderGroup = reminders[when];
         for (var id in reminderGroup) {
-//          console.log(id);
+          //          console.log(id);
           var info = reminderGroup[id];
-//          console.log(info);
+          //          console.log(info);
           answers.push(`${id.substring(0, 5)} ${info.userTime || ''} ${info.customFor || ''} (${info.diff}).`);
         }
       }
+    }
+  }
+
+  if (isDeveloperId(senderId) && isAsking(question, 'DEV Announce')) {
+    var re = /^dev announce (.*?) (.*)/i;
+    var matches = re.exec(question);
+    if (matches) {
+      var who = matches[1];
+      var message = matches[2];
+
+      if (who.toLowerCase() === 'dev') {
+        who = secrets.devId;
+      }
+
+      answers.push('Sending announcements...');
+
+      //      answers.push(`to ${who} saying ${message}!`);
+      announceTo(who, message);
+
+
+    } else {
+      answers.push('Sorry, I didn\'t get the text to announce...');
     }
   }
 
@@ -290,7 +378,7 @@ function answerQuestions(question, profile, keys, answers) {
     if (numCleared === 1) {
       answers.push(`That's the only reminder I have for you, ${profile.first_name}.`);
     } else if (numCleared) {
-      answers.push(`Those are the reminders I have for you,  ${profile.first_name}.`);
+      answers.push(`Those are the reminders I have for you, ${profile.first_name}.`);
     } else {
       if (question === 'Remind after location update') {
         answers.push('Now you can tell me when to remind you by saying, for example, "remind at 8" for 8 in the morning ' +
@@ -323,7 +411,7 @@ function answerQuestions(question, profile, keys, answers) {
         var userTime = moment(hours, 'H:mm');
 
         if (userTime.isValid()) {
-          answers.push(`Sounds good, ${profile.first_name}. I'll try to let you know around ${userTime
+          answers.push(greatSometimes(', ') + `${profile.first_name}. I'll try to let you know around ${userTime
            .format('HH:mm')} about the Badí' date.`);
 
           when = moment(userTime).subtract(hourDifference, 'hours').format('HH:mm');
@@ -335,7 +423,7 @@ function answerQuestions(question, profile, keys, answers) {
           when = matches[0];
           details.coord = profile.coord;
 
-          answers.push(`Great! I'll try to let you know at ${when} each day about the current Badí' date.`);
+          answers.push(greatSometimes('! ') + `I'll try to let you know at ${when} each day about the current Badí' date.`);
 
           setTimeout(function () {
             processSuntimes(profile.id);
@@ -454,7 +542,6 @@ function sendAllAnswers(question, answers, profile, keys, originalAnswers) {
   });
 
   profile.visitCount = log.length;
-
   storage.setItem(keys.profile, profile);
   storage.setItem(keys.log, log);
 
@@ -674,7 +761,7 @@ function addVerse(profile, answers) {
     var nowTz = moment.tz(zoneName);
     key = nowTz.format('M.D');
     hour = nowTz.hour();
-    timeOfDay = 'for this ' + (hour > 3 && hour < 12 ? 'morning' : (hour > 3 && hour < 18 ? 'afternoon/evening' : 'evening'));
+    timeOfDay = 'for this ' + (hour < 12 ? 'morning' : (hour < 18 ? 'afternoon' : 'evening'));
   } else {
     // don't know user's time
     var now = moment();
@@ -682,12 +769,12 @@ function addVerse(profile, answers) {
     key = now.format('M.D');
     timeOfDay = 'for today';
   }
-  var isAm = hour > 3 && hour < 12; // treat time after midnight as night, not morning
+  var isAm = hour < 12;
   var dayVerses = verses[key];
   if (dayVerses) {
     var verseInfo = dayVerses[isAm ? 'am' : 'pm'];
     if (verseInfo) {
-      var prefix = `Our verse ${timeOfDay}: `;
+      var prefix = `Our verse ${timeOfDay}:\n`;
       //var ellipses = ' ...';
       var ellipses = '';
       //      answers.push(prefix);
@@ -754,7 +841,10 @@ function isAsking(question, text) {
     return false;
   }
   //todo: need to avoid picking up keyword in the middle of another phrase?
-  return question.toUpperCase().indexOf(text.toUpperCase()) !== -1;
+  //  return question.toUpperCase().indexOf(text.toUpperCase()) !== -1;
+  //console.log(text);
+  //console.log(question);
+  return new RegExp("\\b" + text + "\\b", 'i').test(' ' + question + ' ')
 }
 
 function makeKeys(senderId) {
@@ -775,12 +865,21 @@ function isDeveloperId(id) {
 function notifyDeveloper(msg) {
   setTimeout(function (m) {
     var devId = secrets.devId;
-
     var devProfile = getProfile(devId);
     var keys = makeKeys(devId);
-    //sendAllAnswers('new user', [m], devProfile, devId);
-  }, 500, msg);
+    sendAllAnswers('new user', [m], devProfile, keys);
+  }, 3000, msg);
 
+}
+
+function announceTo(whoId, msg) {
+  var profile = getProfile(whoId);
+  if (!profile) {
+    console.log('no profile for: ' + whoId);
+    return;
+  }
+  var keys = makeKeys(whoId);
+  sendAllAnswers('announce', [msg], profile, keys);
 }
 
 bot.on('error', (err) => {
