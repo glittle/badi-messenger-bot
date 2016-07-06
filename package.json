@@ -11,17 +11,32 @@
     "Badi",
     "bot"
   ],
-  "author": {
-    "name": "Glen Little",
-    "email": "glen.little@gmail.com"
-  },
+  "author": "Glen Little <glen.little@gmail.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/glittle/badi-messenger-bot/issues"
   },
   "homepage": "https://github.com/glittle/badi-messenger-bot",
   "dependencies": {
+    "fs": "0.0.2",
+    "glob": "^7.0.5",
+    "http": "0.0.0",
+    "messenger-bot": "^2.3.0",
     "moment": "^2.13.0",
+    "moment-timezone": "^0.5.4",
+    "node-persist": "0.0.11",
+    "node.extend": "^1.1.5",
     "request": "^2.71.0"
+  },
+  "files": [
+    "Badi"
+  ],
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/glittle/badi-messenger-bot.git"
   }
 }
