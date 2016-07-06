@@ -1,5 +1,5 @@
-﻿'use strict'
-const http = require('http')
+﻿'use strict';
+const http = require('http');
 const fs = require('fs');
 const glob = require('glob');
 const Bot = require('messenger-bot');
@@ -8,6 +8,7 @@ const moment = require('moment-timezone');
 const extend = require('node.extend');
 const badiCalc = require('./badiCalc');
 const sunCalc = require('./sunCalc');
+const os = require('os');
 
 //const forceNewMessageChar = '$%';
 const maxAnswerLength = 319;
@@ -468,6 +469,12 @@ function answerQuestions(question, profile, keys, answers) {
     if (profile.tzInfo) {
       addVerse(profile, answers);
     }
+  }
+
+  // -------------------------------------------------------
+  if (isAsking(question, 'dev server')) {
+    answers.push('Server: ' + os.platform() + ' - ' + os.hostname());
+    answers.push('Time: ' + new Date().toString());
   }
 
   // -------------------------------------------------------
