@@ -1,66 +1,27 @@
 {
-  "name": "messenger-bot",
-  "version": "2.3.0",
-  "description": "FB Messenger Platform client",
-  "main": "index.js",
-  "scripts": {
-    "test": "standard && nyc tap test/*.js",
-    "travis-coveralls": "nyc report --reporter=text-lcov | coveralls"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/remixz/messenger-bot.git"
-  },
+  "name": "badi-messenger-bot",
+  "version": "1.0.0",
+  "description": "Badi Messenger Bot",
+  "main": "Badi/app.js",
   "keywords": [
     "messenger",
     "api",
     "client",
+    "Baha'i",
+    "Badi",
     "bot"
   ],
   "author": {
-    "name": "Zach Bruggeman",
-    "email": "mail@bruggie.com"
+    "name": "Glen Little",
+    "email": "glen.little@gmail.com"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/remixz/messenger-bot/issues"
+    "url": "https://github.com/glittle/badi-messenger-bot/issues"
   },
-  "homepage": "https://github.com/remixz/messenger-bot#readme",
+  "homepage": "https://github.com/glittle/badi-messenger-bot",
   "dependencies": {
     "moment": "^2.13.0",
     "request": "^2.71.0"
-  },
-  "devDependencies": {
-    "coveralls": "^2.11.9",
-    "nock": "^8.0.0",
-    "nyc": "^6.4.0",
-    "standard": "^7.0.0",
-    "tap": "^5.7.1"
-  },
-  "gitHead": "658c99a4d5f091dedf43385cf880a7b47b06aed0",
-  "_id": "messenger-bot@2.3.0",
-  "_shasum": "44298f209ae93f76f67a500d90303e9d0dec3082",
-  "_from": "messenger-bot@*",
-  "_npmVersion": "3.5.3",
-  "_nodeVersion": "4.2.4",
-  "_npmUser": {
-    "name": "remixz",
-    "email": "zbruggeman@me.com"
-  },
-  "maintainers": [
-    {
-      "name": "remixz",
-      "email": "mail@bruggie.com"
-    }
-  ],
-  "dist": {
-    "shasum": "44298f209ae93f76f67a500d90303e9d0dec3082",
-    "tarball": "https://registry.npmjs.org/messenger-bot/-/messenger-bot-2.3.0.tgz"
-  },
-  "_npmOperationalInternal": {
-    "host": "packages-12-west.internal.npmjs.com",
-    "tmp": "tmp/messenger-bot-2.3.0.tgz_1463119416650_0.7697871611453593"
-  },
-  "directories": {},
-  "_resolved": "https://registry.npmjs.org/messenger-bot/-/messenger-bot-2.3.0.tgz"
+  }
 }
