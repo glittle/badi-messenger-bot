@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/glittle/badi-messenger-bot",
   "dependencies": {
+    "forever": "^0.15.2",
     "fs": "0.0.2",
     "glob": "^7.0.5",
     "http": "0.0.0",
@@ -26,14 +27,16 @@
     "moment-timezone": "^0.5.4",
     "node-persist": "0.0.11",
     "node.extend": "^1.1.5",
-    "request": "^2.71.0"
+    "request": "^2.71.0",
+    "timezonedb-node": "^1.0.7"
   },
   "files": [
     "Badi"
   ],
   "devDependencies": {},
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "forever -w ./Badi/app.js"
   },
   "repository": {
     "type": "git",

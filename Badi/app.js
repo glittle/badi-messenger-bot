@@ -817,7 +817,7 @@ function addVerse(profile, answers) {
 }
 
 function loadVersesAsync(cb) {
-  fs.readFile('verses.json', 'utf8', (err, data) => {
+  fs.readFile('Badi/verses.json', 'utf8', (err, data) => {
     if (err) {
       console.log('Verses failed to load...');
       console.log(err);
