@@ -1,5 +1,5 @@
-﻿'use strict'
-const http = require('http')
+﻿'use strict';
+const http = require('http');
 const fs = require('fs');
 const glob = require('glob');
 const Bot = require('messenger-bot');
@@ -8,6 +8,7 @@ const moment = require('moment-timezone');
 const extend = require('node.extend');
 const badiCalc = require('./badiCalc');
 const sunCalc = require('./sunCalc');
+const os = require('os');
 
 //const forceNewMessageChar = '$%';
 const maxAnswerLength = 319;
@@ -471,6 +472,12 @@ function answerQuestions(question, profile, keys, answers) {
   }
 
   // -------------------------------------------------------
+  if (isAsking(question, 'dev server')) {
+    answers.push('Server: ' + os.platform() + ' - ' + os.hostname());
+    answers.push('Time: ' + new Date().toString());
+  }
+
+  // -------------------------------------------------------
   if (isAsking(question, 'HELP')) {
 
     answers.push('Here are the phrases that you can use when talking with me.');
@@ -565,9 +572,17 @@ function prepareReminderTimer() {
 function processSuntimes(id) {
   console.log('process suntimes ' + id);
 
-  var now = moment().add(1, 'minutes').toDate(); // needs to be at least one minute in the future!
-  var noon = moment().hours(12);
-  var noonTomorrow = moment(noon).add(1, 'days');
+  var profile = getProfile(id);
+  var zoneName = profile.tzInfo.zoneName;
+
+  // needs to be at least one minute in the future!
+  var nowTz = moment.tz(zoneName).add(1, 'minutes');
+  var noonTz = moment(nowTz).hour(12).minute(0).second(0);
+  var tomorrowNoonTz = moment(noonTz).add(24, 'hours');
+
+  //  var now = moment().add(1, 'minutes').toDate();
+  //  var noon = moment().hours(12);
+  //  var noonTomorrow = moment(noon).add(1, 'days');
 
   var reminders = storage.getItem('reminders');
 
@@ -576,8 +591,8 @@ function processSuntimes(id) {
 
   var numChanged = 0;
 
-  numChanged += addReminders('sunrise', reminders, now, noon, noonTomorrow, id);
-  numChanged += addReminders('sunset', reminders, now, noon, noonTomorrow, id);
+  numChanged += addReminders('sunrise', reminders, nowTz, noonTz, tomorrowNoonTz, id, profile);
+  numChanged += addReminders('sunset', reminders, nowTz, noonTz, tomorrowNoonTz, id, profile);
 
   if (numChanged) {
     // store reminders again
@@ -587,61 +602,59 @@ function processSuntimes(id) {
   }
 }
 
-function addReminders(which, reminders, now, noon, noonTomorrow, idToProcess) {
-  // if idToProcess is null, do everyone!
+function addReminders(which, reminders, nowTz, noonTz, tomorrowNoonTz, idToProcess, profile) {
   var remindersAtWhichEvent = reminders[which];
   var numChanged = 0;
 
   for (var id in remindersAtWhichEvent) {
-    if (remindersAtWhichEvent.hasOwnProperty(id)) {
-      if (!idToProcess || idToProcess === id) {
-        var profileStub = remindersAtWhichEvent[id];
-        //        console.log(profileStub);
+    if (idToProcess === id) {
+      var profileStub = remindersAtWhichEvent[id];
+      //        console.log(profileStub);
 
-        //TODO update to use moment.tz!
+      //TODO update to use moment.tz!
 
-        var lastSetFor = profileStub.lastSetFor;
-        if (lastSetFor) {
-          // remove old version
-          var reminderGroup = reminders[lastSetFor];
-          //          console.log(reminderGroup[id]);
-          if (reminderGroup[id] && reminderGroup[id].customFor === which) {
-            delete reminderGroup[id];
-            console.log(`removed previous ${which} reminder.`)
-            numChanged++;
-          }
+      var lastSetFor = profileStub.lastSetFor;
+      if (lastSetFor) {
+        // remove old version
+        var reminderGroup = reminders[lastSetFor];
+        //          console.log(reminderGroup[id]);
+        if (reminderGroup[id] && reminderGroup[id].customFor === which) {
+          delete reminderGroup[id];
+          console.log(`removed previous ${which} reminder.`)
+          numChanged++;
         }
-
-        var coord = profileStub.coord;
-
-        var sunTimes = sunCalc.getTimes(noon.toDate(), coord.lat, coord.lng)
-        var when = sunTimes[which];
-
-        if (now > when) {
-          sunTimes = sunCalc.getTimes(noonTomorrow.toDate(), coord.lat, coord.lng)
-          when = sunTimes[which];
-        }
-
-        var momentWhen = moment(when);
-        var details = {
-          diff: profileStub.diff,
-          userTime: moment(momentWhen).add(profileStub.diff, 'hours').format('HH:mm'),
-          customFor: which
-        };
-
-        var whenHHMM = momentWhen.format('HH:mm');
-        console.log('added for ' + whenHHMM)
-
-        profileStub.lastSetFor = whenHHMM;
-        profileStub.lastSetAt = moment().format(); // just for interest sake
-
-        //console.log(profileStub);
-
-        var reminderGroup = reminders[whenHHMM] || {};
-        reminderGroup[id] = details;
-        reminders[whenHHMM] = reminderGroup;
-        numChanged++;
       }
+
+      var coord = profile.coord;
+      var zoneName = profile.tzInfo.zoneName;
+
+      var sunTimes = sunCalc.getTimes(noonTz, coord.lat, coord.lng);
+      var whenTz = moment.tz(sunTimes[which], zoneName)
+
+      if (nowTz.isAfter(whenTz, 'minute')) {
+        sunTimes = sunCalc.getTimes(tomorrowNoonTz, coord.lat, coord.lng)
+        whenTz = moment.tz(sunTimes[which], zoneName);
+      }
+
+      var details = {
+        diff: profileStub.diff,
+        userTime: whenTz.format('HH:mm'),
+        customFor: which
+      };
+
+      var serverWhen = moment(whenTz).subtract(profileStub.diff, 'hour');
+      var serverWhenHHMM = serverWhen.format('HH:mm');
+      console.log(`added ${which} for ${serverWhenHHMM}`);
+
+      profileStub.lastSetFor = serverWhenHHMM;
+      profileStub.lastSetAt = moment().format(); // just for interest sake
+
+      console.log(profileStub);
+
+      var reminderGroup = reminders[serverWhenHHMM] || {};
+      reminderGroup[id] = details;
+      reminders[serverWhenHHMM] = reminderGroup;
+      numChanged++;
     }
   }
   return numChanged;
