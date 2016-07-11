@@ -649,7 +649,8 @@ function addReminders(which, reminders, nowTz, noonTz, tomorrowNoonTz, idToProce
       profileStub.lastSetFor = serverWhenHHMM;
       profileStub.lastSetAt = moment().format(); // just for interest sake
 
-      console.log(profileStub);
+      //      console.log(profileStub);
+      //      console.log(details);
 
       var reminderGroup = reminders[serverWhenHHMM] || {};
       reminderGroup[id] = details;

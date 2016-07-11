@@ -150,7 +150,7 @@ var getBDateInfo = function (nowTz, coord, zoneName) {
 
 //  console.log('local sunset ' + sunsetTz.format());
 
-  var afterSunset = nowTz.isAfter(sunsetTz);
+  var afterSunset = nowTz.isSameOrAfter(sunsetTz, 'minute');
 
   if (afterSunset) {
 //    console.log('after sunset');
