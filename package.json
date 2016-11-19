@@ -18,15 +18,19 @@
   },
   "homepage": "https://github.com/glittle/badi-messenger-bot",
   "dependencies": {
+    "express": "^4.14.0",
     "fs": "0.0.2",
     "glob": "^7.0.5",
     "http": "0.0.0",
+    "https": "^1.0.0",
+    "letsencrypt-express": "^2.0.5",
     "messenger-bot": "^2.3.0",
     "moment": "^2.13.0",
     "moment-timezone": "^0.5.4",
     "node-persist": "0.0.11",
     "node.extend": "^1.1.5",
-    "request": "^2.71.0"
+    "request": "^2.71.0",
+    "timezonedb-node": "^1.0.7"
   },
   "files": [
     "Badi"

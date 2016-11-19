@@ -1,13 +1,14 @@
 ﻿'use strict';
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const glob = require('glob');
 const Bot = require('messenger-bot');
 const storage = require('node-persist');
 const moment = require('moment-timezone');
 const extend = require('node.extend');
-const badiCalc = require('./badiCalc');
-const sunCalc = require('./sunCalc');
+const badiCalc = require('./badi/badiCalc');
+const sunCalc = require('./badi/sunCalc');
 const os = require('os');
 
 //const forceNewMessageChar = '$%';
@@ -16,7 +17,8 @@ const sorryMsg = 'Oops... I had a problem just now. Sorry I wasn\'t able to repl
   'My programmer will have to fix something!';
 
 const storageFolder = 'BadiBotStorage';
-const storagePath = '../../../../' + storageFolder;
+//const storagePath = './' + storageFolder;
+const storagePath = 'C:/Users/glen/Source/Repos/badi-messenger-bot/BadiBotStorage';
 
 var manuallyStopped = false; // remote kill switch!
 var reminderInterval = null;
@@ -27,6 +29,7 @@ storage.initSync({
 
 //console.log(storage.keys());
 //console.log(storage.getItem('reminders'));
+//console.log(storage.values());
 
 var secrets = storage.getItem('secrets');
 const timezonedb = require('timezonedb-node')(secrets.timeZoneKey);
@@ -831,7 +834,7 @@ function addVerse(profile, answers) {
 }
 
 function loadVersesAsync(cb) {
-  fs.readFile('verses.json', 'utf8', (err, data) => {
+  fs.readFile('./badi/verses.json', 'utf8', (err, data) => {
     if (err) {
       console.log('Verses failed to load...');
       console.log(err);
@@ -903,4 +906,57 @@ bot.on('error', (err) => {
 prepareReminderTimer();
 loadVersesAsync();
 
-http.createServer(bot.middleware()).listen(1844);
+//http.createServer(bot.middleware()).listen(80);
+//https.createServer(bot.middleware()).listen(443);
+
+//-----
+// returns an instance of node-letsencrypt with additional helper methods
+var lex = require('letsencrypt-express').create({
+  // set to https://acme-v01.api.letsencrypt.org/directory in production
+  //server: 'staging'
+  server: 'https://acme-v01.api.letsencrypt.org/directory'
+
+  // If you wish to replace the default plugins, you may do so here
+  //
+  , challenges: { 'http-01': require('le-challenge-fs').create({ webrootPath: '/tmp/acme-challenges' }) }
+  , store: require('le-store-certbot').create({ webrootPath: '/tmp/acme-challenges' })
+
+  // You probably wouldn't need to replace the default sni handler
+  // See https://github.com/Daplie/le-sni-auto if you think you do
+  //, sni: require('le-sni-auto').create({})
+
+  , approveDomains: approveDomains
+});
+
+function approveDomains(opts, certs, cb) {
+  // This is where you check your database and associated
+  // email addresses with domains and agreements and such
+
+
+  // The domains being approved for the first time are listed in opts.domains
+  // Certs being renewed are listed in certs.altnames
+  if (certs) {
+    opts.domains = certs.altnames;
+  }
+  else {
+    opts.email = 'glen.little@gmail.com';
+    opts.agreeTos = true;
+  }
+
+  // NOTE: you can also change other options such as `challengeType` and `challenge`
+  // opts.challengeType = 'http-01';
+  // opts.challenge = require('le-challenge-fs').create({});
+
+  cb(null, { options: opts, certs: certs });
+}
+
+// handles acme-challenge and redirects to https
+require('http').createServer(lex.middleware(require('redirect-https')())).listen(80, function () {
+  console.log("Listening for ACME http-01 challenges on", this.address());
+});
+
+
+// handles your app
+require('https').createServer(lex.httpsOptions, lex.middleware(bot.middleware())).listen(443, function () {
+  console.log("Listening for ACME tls-sni-01 challenges and serve app on", this.address());
+});
