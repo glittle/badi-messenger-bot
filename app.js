@@ -791,7 +791,7 @@ function addVerse(profile, answers) {
   if (dayVerses) {
     var verseInfo = dayVerses[isAm ? 'am' : 'pm'];
     if (verseInfo) {
-      var prefix = `Our verse ${timeOfDay}:\n`;
+      var prefix = `A verse ${timeOfDay}:\n`;
       //var ellipses = ' ...';
       var ellipses = '';
       //      answers.push(prefix);
@@ -955,8 +955,10 @@ require('http').createServer(lex.middleware(require('redirect-https')())).listen
   console.log("Listening for ACME http-01 challenges on", this.address());
 });
 
-
 // handles your app
 require('https').createServer(lex.httpsOptions, lex.middleware(bot.middleware())).listen(443, function () {
   console.log("Listening for ACME tls-sni-01 challenges and serve app on", this.address());
 });
+//require('https').createServer(lex.httpsOptions, [serveAppFile, lex.middleware(bot.middleware())]).listen(443, function () {
+//  console.log("Listening for ACME tls-sni-01 challenges and serve app on", this.address());
+//});

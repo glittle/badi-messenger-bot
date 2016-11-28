@@ -97,7 +97,9 @@ function addTodayInfoToAnswers(profile, answers) {
     greeting = (`Hello, ${profile.first_name}.`);
   }
 
-  answers.push(greeting + ` Today is ${monthMeaning[bDate.m]} ${bDate.d} (${monthMeaning[bDate.d]}) in the Wondrous calendar! (aka ${bDate.d} ${monthAr[bDate.m]})`);
+  answers.push(greeting + ` Today is ${bDate.d} ${monthMeaning[bDate.m]}-${monthAr[bDate.m]} ${bDate.y} in the Wondrous calendar!`);
+
+  //(${monthMeaning[bDate.d] })
 
 //  console.log('local now: ' + nowTz.format())
 //  console.log('start of day: ' + bDateInfo.startingSunset.format());
