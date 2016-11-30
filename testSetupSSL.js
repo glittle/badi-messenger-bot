@@ -9,7 +9,7 @@ require('letsencrypt-express').create({
 
   , agreeTos: true
 
-  , approveDomains: ['wondrous-badi.ga', 'www.wondrous-badi.ga', 'bot1.wondrous-badi.ga']
+  , approveDomains: ['wondrous-badi.ga', 'www.wondrous-badi.ga']
 
   , app: require('express')().use('/', function (req, res) {
     res.end('Hello, World!');

@@ -54,7 +54,9 @@ bot.on('message', (payload, reply) => {
       respond(profile, payload.message, key);
     } catch (e) {
       console.log(e.stack);
-      bot.sendMessage(profile.id, { text: sorryMsg });
+      bot.sendMessage(profile.id, {
+        text: sorryMsg
+      });
     }
   } else {
     bot.getProfile(payload.sender.id, (err, profile) => {
@@ -65,7 +67,9 @@ bot.on('message', (payload, reply) => {
         respond(profile, payload.message, key);
       } catch (e) {
         console.log(e.stack);
-        bot.sendMessage(profile.id, { text: sorryMsg });
+        bot.sendMessage(profile.id, {
+          text: sorryMsg
+        });
       }
     });
   }
@@ -114,25 +118,24 @@ function respond(profile, payloadMessage, keys) {
 
                 var answerText = greatSometimes('! ') + 'Thanks for your location!';
 
-                bot.sendMessage(senderId,
-                {
-                  text: answerText
-                },
-                (err) => {
-                  if (err) {
-                    console.log(err);
-                  }
-                });
+                bot.sendMessage(senderId, {
+                    text: answerText
+                  },
+                  (err) => {
+                    if (err) {
+                      console.log(err);
+                    }
+                  });
 
                 notifyDeveloper(`New user: ${profile.first_name} in zone ${tzInfo.zoneName}`);
 
                 console.log(`Received location and timezone info for ${profile.first_name}.`);
                 setTimeout(function () {
-                  processSuntimes(senderId); // may be in a new location
+                    processSuntimes(senderId); // may be in a new location
 
-                  var answers = answerQuestions('Remind after location update', profile, keys, []);
-                  sendAllAnswers(question, answers, profile, keys, null);
-                },
+                    var answers = answerQuestions('Remind after location update', profile, keys, []);
+                    sendAllAnswers(question, answers, profile, keys, null);
+                  },
                   1000)
 
               } else {
@@ -144,28 +147,26 @@ function respond(profile, payloadMessage, keys) {
         case 'image':
           console.log(JSON.stringify(payloadMessage.attachments));
           var answer = thanksSometimes() + ':)';
-          bot.sendMessage(senderId,
-                {
-                  text: answer // smiley
-                },
-               (err) => {
-                 if (err) {
-                   console.log(err);
-                 }
-               });
+          bot.sendMessage(senderId, {
+              text: answer // smiley
+            },
+            (err) => {
+              if (err) {
+                console.log(err);
+              }
+            });
           break;
 
         default:
           console.log(JSON.stringify(payloadMessage.attachments));
-          bot.sendMessage(senderId,
-               {
-                 text: 'Thanks, but I don\'t know what to do with that!'
-               },
-               (err) => {
-                 if (err) {
-                   console.log(err);
-                 }
-               });
+          bot.sendMessage(senderId, {
+              text: 'Thanks, but I don\'t know what to do with that!'
+            },
+            (err) => {
+              if (err) {
+                console.log(err);
+              }
+            });
           break;
       }
     }
@@ -271,8 +272,8 @@ function answerQuestions(question, profile, keys, answers) {
         var profiles = [];
         for (var i = 0; i < files.length; i++) {
           var profile = JSON.parse(fs.readFileSync(files[i], 'utf8'));
-          profile.isNew = profile.firstVisit
-            && moment().diff(moment(profile.firstVisit), 'days') < diffDays;
+          profile.isNew = profile.firstVisit &&
+            moment().diff(moment(profile.firstVisit), 'days') < diffDays;
           if (profile.isNew) {
             numNew++;
           }
@@ -386,7 +387,7 @@ function answerQuestions(question, profile, keys, answers) {
     } else {
       if (question === 'Remind after location update') {
         answers.push('Now you can tell me when to remind you by saying, for example, "remind at 8" for 8 in the morning ' +
-            'or "remind at sunset" for when the new day is starting.');
+          'or "remind at sunset" for when the new day is starting.');
       } else {
         answers.push(`Sorry, ${profile.first_name}. I didn't find any reminders for you.`);
       }
@@ -516,15 +517,19 @@ function sendAllAnswers(question, answers, profile, keys, originalAnswers) {
       //      var wantNewMessage = answerText.indexOf(forceNewMessageChar) === 0;
 
       if (!answers.length // past the end
-          || (answerText && (answerText + answers[0]).length > maxAnswerLength)
+        ||
+        (answerText && (answerText + answers[0]).length > maxAnswerLength)
         //          || wantNewMessage
-          || answers[0] === '') {
+        ||
+        answers[0] === '') {
 
         //        if (wantNewMessage) {
         //          answerText = answerText.replace(forceNewMessageChar, '');
         //        }
 
-        bot.sendMessage(profile.id, { text: answerText }, (err) => {
+        bot.sendMessage(profile.id, {
+          text: answerText
+        }, (err) => {
           if (err) {
             console.log(err);
             console.log(answerText);
@@ -918,14 +923,17 @@ var lex = require('letsencrypt-express').create({
 
   // If you wish to replace the default plugins, you may do so here
   //
-  , challenges: { 'http-01': require('le-challenge-fs').create({ webrootPath: '/tmp/acme-challenges' }) }
-  , store: require('le-store-certbot').create({ webrootPath: '/tmp/acme-challenges' })
-
-  // You probably wouldn't need to replace the default sni handler
-  // See https://github.com/Daplie/le-sni-auto if you think you do
-  //, sni: require('le-sni-auto').create({})
-
-  , approveDomains: approveDomains
+  ,
+  challenges: {
+    'http-01': require('le-challenge-fs').create({
+      webrootPath: '/tmp/acme-challenges'
+    })
+  },
+  store: require('le-store-certbot').create({
+    webrootPath: '/tmp/acme-challenges'
+  }),
+  
+  approveDomains: approveDomains
 });
 
 function approveDomains(opts, certs, cb) {
@@ -937,8 +945,7 @@ function approveDomains(opts, certs, cb) {
   // Certs being renewed are listed in certs.altnames
   if (certs) {
     opts.domains = certs.altnames;
-  }
-  else {
+  } else {
     opts.email = 'glen.little@gmail.com';
     opts.agreeTos = true;
   }
@@ -947,7 +954,10 @@ function approveDomains(opts, certs, cb) {
   // opts.challengeType = 'http-01';
   // opts.challenge = require('le-challenge-fs').create({});
 
-  cb(null, { options: opts, certs: certs });
+  cb(null, {
+    options: opts,
+    certs: certs
+  });
 }
 
 // handles acme-challenge and redirects to https
@@ -955,10 +965,44 @@ require('http').createServer(lex.middleware(require('redirect-https')())).listen
   console.log("Listening for ACME http-01 challenges on", this.address());
 });
 
+var app = require('express')();
+
+app.get('/fbBot1', (req, res) => {
+  return bot._verify(req, res)
+})
+
+app.post('/fbBot1', (req, res) => {
+  console.log('incoming post');
+
+  res.writeHead(200, {
+    'Content-Type': 'application/json'
+  })
+  let body = ''
+
+  req.on('data', (chunk) => {
+    body += chunk
+  })
+
+  req.on('end', () => {
+    let parsed = JSON.parse(body)
+    bot._handleMessage(parsed)
+
+    res.end(JSON.stringify({
+      status: 'ok'
+    }))
+  })
+})
+
+app.get('/', function (req, res) {
+  res.end('Hello, World!');
+});
+
+app.get('/abc', function (req, res) {
+  res.end('Hello, ABC 123!');
+});
+
+
 // handles your app
-require('https').createServer(lex.httpsOptions, lex.middleware(bot.middleware())).listen(443, function () {
+require('https').createServer(lex.httpsOptions, lex.middleware(app)).listen(443, function () {
   console.log("Listening for ACME tls-sni-01 challenges and serve app on", this.address());
 });
-//require('https').createServer(lex.httpsOptions, [serveAppFile, lex.middleware(bot.middleware())]).listen(443, function () {
-//  console.log("Listening for ACME tls-sni-01 challenges and serve app on", this.address());
-//});
