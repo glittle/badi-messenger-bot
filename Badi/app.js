@@ -55,7 +55,11 @@ bot.on('message', (payload, reply) => {
     }
   } else {
     bot.getProfile(payload.sender.id, (err, profile) => {
-      if (err) throw err
+      if (err) {
+        console.log(err);
+        console.log(profile);
+        return;
+      }
       profile.id = senderId;
       profile.firstVisit = moment().format();
       try {
@@ -606,6 +610,7 @@ function addReminders(which, reminders, nowTz, noonTz, tomorrowNoonTz, idToProce
   var remindersAtWhichEvent = reminders[which];
   var numChanged = 0;
 
+  // ReSharper disable once MissingHasOwnPropertyInForeach
   for (var id in remindersAtWhichEvent) {
     if (idToProcess === id) {
       var profileStub = remindersAtWhichEvent[id];
