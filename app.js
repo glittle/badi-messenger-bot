@@ -932,7 +932,7 @@ var lex = require('letsencrypt-express').create({
   store: require('le-store-certbot').create({
     webrootPath: '/tmp/acme-challenges'
   }),
-  
+
   approveDomains: approveDomains
 });
 
@@ -999,6 +999,17 @@ app.get('/', function (req, res) {
 
 app.get('/abc', function (req, res) {
   res.end('Hello, ABC 123!');
+});
+
+app.get('/app1', function (req, res) {
+  console.log(`\nsending app file to ${req.connection.remoteAddress}`);
+  var options = {
+    headers: {
+      'Content-disposition': 'attachment; filename=Wondrous-Badi-App.apk'
+    }
+  };
+  res.sendFile('C:\\Users\\glen\\Source\\Projects\\WondrousBadiMobile\\WondrousBadi\\bin\\Android\\Release\\android-release.apk',
+    options);
 });
 
 
