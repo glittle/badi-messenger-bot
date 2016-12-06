@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const fs = require('fs');
 const glob = require('glob');
 const extend = require('node.extend');
@@ -7,13 +9,15 @@ const moment = require('moment-timezone');
 const badiCalc = require('./badi/badiCalc');
 const sunCalc = require('./badi/sunCalc');
 const os = require('os');
+const MongoClient = require('mongodb').MongoClient;
+const MongoLogger = require('mongodb').Logger;
 
 //const forceNewMessageChar = '$%';
 const maxAnswerLength = 319;
 const sorryMsg = 'Oops... I had a problem just now. Sorry I wasn\'t able to reply properly. ' +
     'My programmer will have to fix something!';
 
-const storageFolder = 'BadiBotStorage';
+// const storageFolder = 'BadiBotStorage';
 //const storagePath = './' + storageFolder;
 const storagePath = 'C:/Users/glen/Source/Repos/badi-messenger-bot/BadiBotStorage';
 
@@ -25,41 +29,113 @@ storage.initSync({
 });
 
 //console.log(storage.keys());
-//console.log(storage.getItem('reminders'));
+//console.log(getItem('reminders'));
 //console.log(storage.values());
 
-var secrets = storage.getItem('secrets');
-const timezonedb = require('timezonedb-node')(secrets.timeZoneKey);
+const timezonedb = require('timezonedb-node')(process.env.timeZoneKey);
 var verses = null;
 
-
 let bot = new Bot({
-    token: secrets.botKey,
+    token: process.env.botKey,
     verify: 'MyBadiBot'
 });
+var mongo = {};
+
+function getItem(id, cb) {
+    console.log('get ', id);
+    // 10153480533177821_log
+
+    var parts = id.split('_');
+    var collectionName = parts[1] || 'core';
+    var whoId = parts[0]; // facebook ID
+
+    var col = mongo.collection(collectionName);
+
+    switch (collectionName) {
+        case 'profile':
+            var profile = col.findOne({
+                id: whoId
+            }).then(function (r) {
+                cb(r);
+                return;
+            });
+            return;
+
+        case 'log':
+            break;
+        case 'core':
+            break;
+
+    }
+
+    return storage.getItem(id);
+}
+
+function setItem(id, value) {
+
+    //2016-12-06
+    // profile - in mongo; 
+    // logs - on disk only;
+    // reminders - on disk and written to mango 
+
+    console.log('set ', id);
+    var parts = id.split('_');
+    var collectionName = parts[1] || 'core';
+    var whoId = parts[0]; // facebook ID
+
+    var col = mongo.collection(collectionName);
+    var doUpdate = false;
+
+    switch (collectionName) {
+        case 'profile':
+            console.log(value);
+            doUpdate = true;
+            break;
+        case 'log':
+            console.log('skipping log');
+            break;
+        case 'core':
+            // for reminders
+            value._id = 1; // only want one for now
+            console.log(value);
+            break;
+    }
+
+    if (doUpdate) {
+        col.update({
+            id: value.id
+        }, value, {
+            upsert: true
+        })
+    }
+
+    storage.setItem(id, value);
+}
+
+function incrementVisitCount(profile) {
+    var col = mongo.collection('profile');
+    var id = profile.id;
+    console.log(`update visitor count for ${id} (${profile.first_name})`);
+    var r = col.update({
+        id: id
+    }, {
+        $inc: {
+            visitCount: 1
+        }
+    });
+}
 
 bot.on('message', (payload, reply) => {
 
     var senderId = payload.sender.id;
     var key = makeKeys(senderId);
 
-    var profile = storage.getItem(key.profile);
-    //  var log = storage.getItem(key.log);
+    getItem(key.profile, function (profile) {
 
-    if (profile) {
-        try {
-            respond(profile, payload.message, key);
-        } catch (e) {
-            console.log(e.stack);
-            bot.sendMessage(profile.id, {
-                text: sorryMsg
-            });
-        }
-    } else {
-        bot.getProfile(payload.sender.id, (err, profile) => {
-            if (err) throw err
-            profile.id = senderId;
-            profile.firstVisit = moment().format();
+        console.log(profile);
+        //  var log = storage.getItem(key.log);
+
+        if (profile) {
             try {
                 respond(profile, payload.message, key);
             } catch (e) {
@@ -68,8 +144,22 @@ bot.on('message', (payload, reply) => {
                     text: sorryMsg
                 });
             }
-        });
-    }
+        } else {
+            bot.getProfile(payload.sender.id, (err, profile) => {
+                if (err) throw err
+                profile.id = senderId;
+                profile.firstVisit = moment().format();
+                try {
+                    respond(profile, payload.message, key);
+                } catch (e) {
+                    console.log(e.stack);
+                    bot.sendMessage(profile.id, {
+                        text: sorryMsg
+                    });
+                }
+            });
+        }
+    });
 });
 
 function respond(profile, payloadMessage, keys) {
@@ -108,10 +198,10 @@ function respond(profile, payloadMessage, keys) {
                                 tzInfo.serverDiff = hourDifference;
 
                                 // reload and save the profile
-                                var profile = storage.getItem(keys.profile);
+                                // var profile = getItem(keys.profile);
                                 profile.tzInfo = tzInfo;
                                 profile.coord = coord;
-                                storage.setItem(keys.profile, profile);
+                                setItem(keys.profile, profile);
 
                                 var answerText = greatSometimes('! ') + 'Thanks for your location!';
 
@@ -254,9 +344,36 @@ function answerQuestions(question, profile, keys, answers) {
     }
 
     // -------------------------------------------------------
-    if (isDeveloperId(senderId) && isAsking(question, ['DEV VISITORS', 'DEV VISITORS NEW', 'DEV NEW'])) {
+    if (isAsking(question, "DEV MOVE PROFILES") && isDeveloperId(senderId)) {
+        // var profiles = mongo.collection('profile');
+        // answers.push(`Moving profiles`);
+        // var num = 0;
+        // glob(`${storagePath}/*_profile`, {
+
+        // }, function (er, files) {
+        //     if (er) {
+        //         console.log(er);
+        //     } else {
+        //         for (var i = 0; i < files.length; i++) {
+        //             var profile = JSON.parse(fs.readFileSync(files[i], 'utf8'));
+        //             // let mongo make _id field. We'll use the "id" field from Facebook
+        //             profiles.update({
+        //                 id: profile.id
+        //             }, profile, {
+        //                 upsert: true
+        //             })
+
+        //             num++;
+        //         }
+        //         answers.push(`Moved ${num} profiles`);
+        //     }
+        // })
+    }
+
+    // -------------------------------------------------------
+    if (isAsking(question, ['DEV VISITORS', 'DEV VISITORS NEW', 'DEV NEW']) && isDeveloperId(senderId)) {
         answers.push(`Checking the visitors list...`);
-        glob(`../${storageFolder}/*_profile`, {
+        glob(`${storagePath}/*_profile`, {
 
         }, function (er, files) {
             if (er) {
@@ -325,7 +442,7 @@ function answerQuestions(question, profile, keys, answers) {
     // -------------------------------------------------------
     if (isAsking(question, 'DEV REMINDERS')) {
         answers.push('Reminders set for:');
-        var reminders = storage.getItem('reminders') || {};
+        var reminders = getItem('reminders') || {};
 
         for (var when in reminders) {
             if (reminders.hasOwnProperty(when)) {
@@ -349,7 +466,7 @@ function answerQuestions(question, profile, keys, answers) {
             var message = matches[2];
 
             if (who.toLowerCase() === 'dev') {
-                who = secrets.devId;
+                who = process.env.devId;
             }
 
             answers.push('Sending announcements...');
@@ -435,11 +552,11 @@ function answerQuestions(question, profile, keys, answers) {
 
             if (when) {
                 // reminders are shared... storage is not multi-user, so use it for very short times!
-                var reminders = storage.getItem('reminders') || {};
+                var reminders = getItem('reminders') || {};
                 var reminderGroup = reminders[when] || {};
                 reminderGroup[senderId] = extend(reminderGroup[senderId], details);
                 reminders[when] = reminderGroup;
-                storage.setItem('reminders', reminders);
+                setItem('reminders', reminders);
 
             } else {
                 answers.push("Please include 'sunset' or give a time, like 21:30.");
@@ -546,16 +663,17 @@ function sendAllAnswers(question, answers, profile, keys, originalAnswers) {
     }
 
     // get it again
-    var log = storage.getItem(keys.log) || [];
+    var log = getItem(keys.log) || [];
     log.push({
         when: new Date(),
         question: question,
         answers: originalAnswers
     });
 
-    profile.visitCount = log.length;
-    storage.setItem(keys.profile, profile);
-    storage.setItem(keys.log, log);
+    //profile.visitCount = log.length;
+    incrementVisitCount(profile);
+    //setItem(keys.profile, profile);
+    setItem(keys.log, log);
 
     console.log('stored profile and log');
 }
@@ -577,34 +695,36 @@ function prepareReminderTimer() {
 function processSuntimes(id) {
     console.log('process suntimes ' + id);
 
-    var profile = getProfile(id);
-    var zoneName = profile.tzInfo.zoneName;
+    getProfile(id, function (profile) {
 
-    // needs to be at least one minute in the future!
-    var nowTz = moment.tz(zoneName).add(1, 'minutes');
-    var noonTz = moment(nowTz).hour(12).minute(0).second(0);
-    var tomorrowNoonTz = moment(noonTz).add(24, 'hours');
+        var zoneName = profile.tzInfo.zoneName;
 
-    //  var now = moment().add(1, 'minutes').toDate();
-    //  var noon = moment().hours(12);
-    //  var noonTomorrow = moment(noon).add(1, 'days');
+        // needs to be at least one minute in the future!
+        var nowTz = moment.tz(zoneName).add(1, 'minutes');
+        var noonTz = moment(nowTz).hour(12).minute(0).second(0);
+        var tomorrowNoonTz = moment(noonTz).add(24, 'hours');
 
-    var reminders = storage.getItem('reminders');
+        //  var now = moment().add(1, 'minutes').toDate();
+        //  var noon = moment().hours(12);
+        //  var noonTomorrow = moment(noon).add(1, 'days');
 
-    //  console.log('Before changes ------');
-    //  console.log(reminders);
+        var reminders = getItem('reminders');
 
-    var numChanged = 0;
+        //  console.log('Before changes ------');
+        //  console.log(reminders);
 
-    numChanged += addReminders('sunrise', reminders, nowTz, noonTz, tomorrowNoonTz, id, profile);
-    numChanged += addReminders('sunset', reminders, nowTz, noonTz, tomorrowNoonTz, id, profile);
+        var numChanged = 0;
 
-    if (numChanged) {
-        // store reminders again
-        //    console.log(numChanged + ' changed ----');
-        //    console.log(reminders);
-        storage.setItem('reminders', reminders);
-    }
+        numChanged += addReminders('sunrise', reminders, nowTz, noonTz, tomorrowNoonTz, id, profile);
+        numChanged += addReminders('sunset', reminders, nowTz, noonTz, tomorrowNoonTz, id, profile);
+
+        if (numChanged) {
+            // store reminders again
+            //    console.log(numChanged + ' changed ----');
+            //    console.log(reminders);
+            setItem('reminders', reminders);
+        }
+    });
 }
 
 function addReminders(which, reminders, nowTz, noonTz, tomorrowNoonTz, idToProcess, profile) {
@@ -668,7 +788,7 @@ function addReminders(which, reminders, nowTz, noonTz, tomorrowNoonTz, idToProce
 
 function doReminders() {
 
-    var reminders = storage.getItem('reminders');
+    var reminders = getItem('reminders');
     if (reminders) {
         var serverWhen = moment().format('HH:mm');
         // process.stdout.write(`\rchecking reminders for ${serverWhen} (server time)`)
@@ -697,7 +817,7 @@ function doReminders() {
         }
 
         if (saveNeeded) {
-            storage.setItem('reminders', reminders);
+            setItem('reminders', reminders);
         }
     }
 
@@ -707,7 +827,7 @@ function processReminders(currentId, answers, deleteReminders) {
     var num = 0;
 
     // reminders are shared... storage is not multi-user, so use it for very short times!
-    var reminders = storage.getItem('reminders') || {};
+    var reminders = getItem('reminders') || {};
     var saveNeeded = false;
 
     for (var when in reminders) {
@@ -742,25 +862,26 @@ function processReminders(currentId, answers, deleteReminders) {
         }
     }
     if (saveNeeded) {
-        storage.setItem('reminders', reminders);
+        setItem('reminders', reminders);
     }
     return num;
 }
 
 function sendReminder(serverWhen, id, info) {
     var answers = [];
-    var profile = getProfile(id);
-    var key = makeKeys(id);
+    getProfile(id, function (profile) {
+        var key = makeKeys(id);
 
-    badiCalc.addTodayInfoToAnswers(profile, answers);
-    addVerse(profile, answers);
+        badiCalc.addTodayInfoToAnswers(profile, answers);
+        addVerse(profile, answers);
 
-    sendAllAnswers(`Reminder at ${serverWhen}`, answers, profile, key, null);
+        sendAllAnswers(`Reminder at ${serverWhen}`, answers, profile, key, null);
+    });
 }
 
-function getProfile(id) {
+function getProfile(id, cb) {
     var key = id + '_profile';
-    return storage.getItem(key);
+    return getItem(key, cb);
 }
 
 function addHours(d, hours) {
@@ -875,7 +996,7 @@ function makeKeys(senderId) {
 }
 
 function isDeveloperId(id) {
-    var isDev = secrets.devId === id;
+    var isDev = process.env.devId === id;
     if (!isDev) {
         console.log('!!! failed dev attempt from user id ' + id);
     }
@@ -884,30 +1005,54 @@ function isDeveloperId(id) {
 
 function notifyDeveloper(msg) {
     setTimeout(function (m) {
-        var devId = secrets.devId;
-        var devProfile = getProfile(devId);
-        var keys = makeKeys(devId);
-        sendAllAnswers('new user', [m], devProfile, keys);
+        var devId = process.env.devId;
+        getProfile(devId, function (devProfile) {
+            var keys = makeKeys(devId);
+            sendAllAnswers('new user', [m], devProfile, keys);
+        });
     }, 3000, msg);
 
 }
 
 function announceTo(whoId, msg) {
-    var profile = getProfile(whoId);
-    if (!profile) {
-        console.log('no profile for: ' + whoId);
-        return;
-    }
-    var keys = makeKeys(whoId);
-    sendAllAnswers('announce', [msg], profile, keys);
+    getProfile(whoId, function (profile) {
+        if (!profile) {
+            console.log('no profile for: ' + whoId);
+            return;
+        }
+        var keys = makeKeys(whoId);
+        sendAllAnswers('announce', [msg], profile, keys);
+    });
 }
 
 bot.on('error', (err) => {
     console.log(err.message)
 })
 
-prepareReminderTimer();
 loadVersesAsync();
+
+
+MongoClient.connect(process.env.mongo, function (err, db) {
+    if (err) {
+        console.log(err.name, err.message, `(${err.code})`);
+        return;
+    }
+    console.log('Connected to MongoDb.')
+
+    // Set debug level
+    MongoLogger.setLevel('info');
+
+    // Set our own logger
+    MongoLogger.setCurrentLogger(function (msg, context) {
+        console.log(msg, context);
+    });
+
+    mongo = db;
+
+    prepareReminderTimer();
+
+});
+
 
 module.exports = {
     bot: bot

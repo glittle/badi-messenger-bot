@@ -100,12 +100,13 @@ app.get('/app1', function (req, res) {
 
 // handles acme-challenge and redirects to https
 require('http').createServer(lex.middleware(require('redirect-https')())).listen(80, function () {
-  console.log("\nListening for ACME http-01 challenges on", this.address());
+  // console.log("\nListening for ACME http-01 challenges on", this.address());
 });
 
 // handles your app
 require('https').createServer(lex.httpsOptions, lex.middleware(app)).listen(443, function () {
-  console.log("Listening for ACME tls-sni-01 challenges and serve app on", this.address());
+  // console.log("Listening for ACME tls-sni-01 challenges and serve app on", this.address());
+  console.log("\n\nListening on", this.address());
 });
 
 const bot = require('./badiBot').bot;
