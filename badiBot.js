@@ -902,6 +902,7 @@ function addVerse(profile, answers) {
         var nowTz = moment.tz(zoneName);
         key = nowTz.format('M.D');
         hour = nowTz.hour();
+        //TODO: should say evening after sunset!
         timeOfDay = 'for this ' + (hour < 12 ? 'morning' : (hour < 18 ? 'afternoon' : 'evening'));
     } else {
         // don't know user's time

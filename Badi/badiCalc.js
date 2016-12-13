@@ -97,7 +97,7 @@ function addTodayInfoToAnswers(profile, answers) {
     greeting = (`Hello, ${profile.first_name}.`);
   }
 
-  answers.push(greeting + ` Today is ${bDate.d} ${monthMeaning[bDate.m]}-${monthAr[bDate.m]} ${bDate.y} in the Wondrous calendar!`);
+  answers.push(greeting + ` Today is ${monthMeaning[bDate.m]} / ${monthAr[bDate.m]} ${bDate.d} in the Wondrous calendar!`);
 
   //(${monthMeaning[bDate.d] })
 
