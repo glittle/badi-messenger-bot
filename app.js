@@ -9,7 +9,7 @@ app.get('/', (req, res) => {
 })
 
 app.post('/', (req, res) => {
-  console.log('incoming post');
+  console.log('\nincoming post');
 
   res.writeHead(200, {
     'Content-Type': 'application/json'
@@ -33,6 +33,6 @@ app.post('/', (req, res) => {
 
 // Start the server
 let server = app.listen(app.get('port'), function () {
-  console.log('App listening on port %s', server.address().port);
+  console.log('App listening on port %s at %s', server.address().port, new Date());
   console.log('Press Ctrl+C to quit.');
 });

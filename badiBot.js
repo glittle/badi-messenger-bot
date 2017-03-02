@@ -19,7 +19,7 @@ const sorryMsg = 'Oops... I had a problem just now. Sorry I wasn\'t able to repl
 
 // const storageFolder = 'BadiBotStorage';
 //const storagePath = './' + storageFolder;
-const storagePath = 'C:/Users/glen/Source/Repos/badi-messenger-bot/BadiBotStorage';
+const storagePath = 'C:/Users/glen/Source/Repos/BadiBotStorage';
 
 var manuallyStopped = false; // remote kill switch!
 var reminderInterval = null;
@@ -42,7 +42,7 @@ let bot = new Bot({
 var mongo = {};
 
 function getItem(id, cb) {
-    console.log('get ', id);
+    console.log('get', id);
     // 10153480533177821_log
 
     var parts = id.split('_');
@@ -68,6 +68,7 @@ function getItem(id, cb) {
 
     }
 
+    console.log(`get from old Storge: --${id}--`)
     return storage.getItem(id);
 }
 
