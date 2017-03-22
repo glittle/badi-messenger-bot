@@ -19,7 +19,7 @@ const sorryMsg = 'Oops... I had a problem just now. Sorry I wasn\'t able to repl
 
 // const storageFolder = 'BadiBotStorage';
 //const storagePath = './' + storageFolder;
-const storagePath = 'C:/Users/glen/Source/Repos/BadiBotStorage';
+const storagePath = 'C:/dev/badi-messenger-bot-storage';
 
 var manuallyStopped = false; // remote kill switch!
 var reminderInterval = null;
@@ -29,7 +29,6 @@ storage.initSync({
 });
 
 //console.log(storage.keys());
-//console.log(getItem('reminders'));
 //console.log(storage.values());
 
 const timezonedb = require('timezonedb-node')(process.env.timeZoneKey);
@@ -106,8 +105,8 @@ function setItem(id, value) {
         col.update({
             id: value.id
         }, value, {
-            upsert: true
-        })
+                upsert: true
+            })
     }
 
     storage.setItem(id, value);
@@ -120,10 +119,10 @@ function incrementVisitCount(profile) {
     var r = col.update({
         id: id
     }, {
-        $inc: {
-            visitCount: 1
-        }
-    });
+            $inc: {
+                visitCount: 1
+            }
+        });
 }
 
 bot.on('message', (payload, reply) => {
@@ -207,8 +206,8 @@ function respond(profile, payloadMessage, keys) {
                                 var answerText = greatSometimes('! ') + 'Thanks for your location!';
 
                                 bot.sendMessage(senderId, {
-                                        text: answerText
-                                    },
+                                    text: answerText
+                                },
                                     (err) => {
                                         if (err) {
                                             console.log(err);
@@ -219,11 +218,11 @@ function respond(profile, payloadMessage, keys) {
 
                                 console.log(`Received location and timezone info for ${profile.first_name}.`);
                                 setTimeout(function () {
-                                        processSuntimes(senderId); // may be in a new location
+                                    processSuntimes(senderId); // may be in a new location
 
-                                        var answers = answerQuestions('Remind after location update', profile, keys, []);
-                                        sendAllAnswers(question, answers, profile, keys, null);
-                                    },
+                                    var answers = answerQuestions('Remind after location update', profile, keys, []);
+                                    sendAllAnswers(question, answers, profile, keys, null);
+                                },
                                     1000)
 
                             } else {
@@ -236,8 +235,8 @@ function respond(profile, payloadMessage, keys) {
                     console.log(JSON.stringify(payloadMessage.attachments));
                     var answer = thanksSometimes() + ':)';
                     bot.sendMessage(senderId, {
-                            text: answer // smiley
-                        },
+                        text: answer // smiley
+                    },
                         (err) => {
                             if (err) {
                                 console.log(err);
@@ -248,8 +247,8 @@ function respond(profile, payloadMessage, keys) {
                 default:
                     console.log(JSON.stringify(payloadMessage.attachments));
                     bot.sendMessage(senderId, {
-                            text: 'Thanks, but I don\'t know what to do with that!'
-                        },
+                        text: 'Thanks, but I don\'t know what to do with that!'
+                    },
                         (err) => {
                             if (err) {
                                 console.log(err);
@@ -468,13 +467,15 @@ function answerQuestions(question, profile, keys, answers) {
 
             if (who.toLowerCase() === 'dev') {
                 who = process.env.devId;
+            } else {
+                console.log('Testing only')
+                return;
             }
 
             answers.push('Sending announcements...');
 
             //      answers.push(`to ${who} saying ${message}!`);
-            announceTo(who, message);
-
+            announceTo(who, message, true);
 
         } else {
             answers.push('Sorry, I didn\'t get the text to announce...');
@@ -484,7 +485,7 @@ function answerQuestions(question, profile, keys, answers) {
     // -------------------------------------------------------
     if (isAsking(question, 'CLEAR REMINDERS')) {
 
-        var numCleared = processReminders(senderId, answers, true);
+        var numCleared = processReminders(senderId, answers, true, true);
         if (numCleared) {
             answers.push(`Done. I've cleared your reminder(s) and won't send you the daily reminders any more.`);
         } else {
@@ -494,7 +495,7 @@ function answerQuestions(question, profile, keys, answers) {
 
     // -------------------------------------------------------
     if (isAsking(question, ['REMIND WHEN', 'Remind after location update'])) {
-        var numCleared = processReminders(senderId, answers, false);
+        var numCleared = processReminders(senderId, answers, false, true);
         if (numCleared === 1) {
             answers.push(`That's the only reminder I have for you, ${profile.first_name}.`);
         } else if (numCleared) {
@@ -532,7 +533,7 @@ function answerQuestions(question, profile, keys, answers) {
 
                 if (userTime.isValid()) {
                     answers.push(greatSometimes(', ') + `${profile.first_name}. I'll try to let you know around ${userTime
-           .format('HH:mm')} about the Badí' date.`);
+                        .format('HH:mm')} about the Badí' date.`);
 
                     when = moment(userTime).subtract(hourDifference, 'hours').format('HH:mm');
                     details.userTime = userTime.format('HH:mm');
@@ -790,6 +791,7 @@ function addReminders(which, reminders, nowTz, noonTz, tomorrowNoonTz, idToProce
 function doReminders() {
 
     var reminders = getItem('reminders');
+
     if (reminders) {
         var serverWhen = moment().format('HH:mm');
         // process.stdout.write(`\rchecking reminders for ${serverWhen} (server time)`)
@@ -824,7 +826,7 @@ function doReminders() {
 
 }
 
-function processReminders(currentId, answers, deleteReminders) {
+function processReminders(currentId, answers, deleteReminders, showCustom) {
     var num = 0;
 
     // reminders are shared... storage is not multi-user, so use it for very short times!
@@ -834,6 +836,7 @@ function processReminders(currentId, answers, deleteReminders) {
     for (var when in reminders) {
         if (reminders.hasOwnProperty(when)) {
             var remindersAtWhen = reminders[when];
+            console.log(when, remindersAtWhen);
             for (var id in remindersAtWhen) {
                 if (id === currentId) {
                     var info = remindersAtWhen[id];
@@ -848,7 +851,9 @@ function processReminders(currentId, answers, deleteReminders) {
                         answers.push(`Removed reminder at ${info.userTime || when}.`);
                     } else {
                         if (info.customFor) {
-                            answers.push(`The next ${info.customFor} reminder will be at ${info.userTime}.`);
+                            if (showCustom) {
+                                answers.push(`The next ${info.customFor} reminder will be at ${info.userTime}.`);
+                            }
                         } else {
                             answers.push(`➢ Remind at ${info.userTime || when}`);
                         }
@@ -1016,14 +1021,28 @@ function notifyDeveloper(msg) {
 
 }
 
-function announceTo(whoId, msg) {
+function announceTo(whoId, msg, includeReminderTimes) {
     getProfile(whoId, function (profile) {
         if (!profile) {
             console.log('no profile for: ' + whoId);
             return;
         }
         var keys = makeKeys(whoId);
-        sendAllAnswers('announce', [msg], profile, keys);
+
+        var answers = [msg];
+
+        if (includeReminderTimes) {
+            var numCleared = processReminders(whoId, answers, false, false);
+            if (numCleared === 1) {
+                // answers.push(`That's the only reminder I have for you, ${profile.first_name}.`);
+            } else if (numCleared) {
+                // answers.push(`Those are the reminders I have for you, ${profile.first_name}.`);
+            } else {
+                answers.push(`I don't have any reminders for you, ${profile.first_name}!`);
+            }
+        }
+
+        sendAllAnswers('announce', answers, profile, keys);
     });
 }
 
@@ -1055,6 +1074,7 @@ MongoClient.connect(process.env.mongo, function (err, db) {
 
 });
 
+//console.log(getItem('reminders'));
 
 module.exports = {
     bot: bot

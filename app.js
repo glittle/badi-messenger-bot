@@ -5,7 +5,8 @@ let app = express();
 app.set('port', (process.env.PORT || 8002));
 
 app.get('/', (req, res) => {
-  return bot._verify(req, res)
+  return 'hello';
+  // return bot._verify(req, res)
 })
 
 app.post('/', (req, res) => {
